@@ -3,6 +3,7 @@ package main
 import (
 	"embed"
 	"harmoniz/internal/adapters/db"
+	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
 	"log/slog"
 	"os"
@@ -50,8 +51,11 @@ func main() {
 
 	logger.Log.Info("Database initialized successfully", "path", dbPath)
 
+	// Setup Services
+	scannerService := scanner.NewService(dbAdapter)
+
 	// Create an instance of the app structure
-	app := NewApp()
+	app := NewApp(scannerService)
 
 	// Create application with options
 	err = wails.Run(&options.App{
@@ -67,6 +71,10 @@ func main() {
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:   true,
+			DisableWebViewDrop: false,
 		},
 	})
 

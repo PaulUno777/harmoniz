@@ -21,21 +21,70 @@
   let currentLibraryPath = $state("");
   let isDragOver = $state(false);
   let backendConnected = $state<boolean | null>(null);
+  let tracks = $state<Track[]>([]);
+  let totalTrackCount = $state(0);
+  let isLoadingTracks = $state(false);
+
+  const appTitle = "Harmoniz";
 
   // @ts-ignore
-  import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime.js";
+  import { OnFileDrop, OnFileDropOff, WindowSetTitle } from "../wailsjs/runtime/runtime.js";
   // @ts-ignore
-  import { Greet } from "../wailsjs/go/main/App.js";
+  import { OpenFolderDialog, ScanLibrary, ListTracks } from "../wailsjs/go/main/App.js";
+
+  function parentDir(p: string): string {
+    const i = Math.max(p.lastIndexOf('/'), p.lastIndexOf('\\'));
+    return i <= 0 ? p : p.slice(0, i);
+  }
+
+  function applyDroppedPaths(paths: string[]) {
+    console.log("applyDroppedPaths called with:", paths);
+    if (!paths?.length) {
+      console.log("No paths provided");
+      return;
+    }
+    const p = paths[0];
+    console.log("Processing path:", p);
+    // Check if it's a folder (ends with / or \ or doesn't have a file extension)
+    const isFolder = p.endsWith('/') || p.endsWith('\\') || !/\.([^/\\]+)$/.test(p);
+    const folder = isFolder
+      ? p.replace(/[/\\]+$/, '') // Remove trailing slashes
+      : parentDir(p); // If it's a file, get parent directory
+    console.log("Extracted folder:", folder, "isFolder:", isFolder);
+    if (folder) {
+      currentLibraryPath = folder;
+      updateWindowTitle(folder);
+      console.log("Dropped folder:", folder);
+      handleScan(folder);
+    }
+  }
+
+  function updateWindowTitle(path: string) {
+    try {
+      WindowSetTitle(path ? `${appTitle} — ${path}` : appTitle);
+    } catch (_) {}
+  }
+
+  $effect(() => {
+    if (!currentLibraryPath) {
+      try {
+        WindowSetTitle(appTitle);
+      } catch (_) {}
+    }
+  });
 
   onMount(() => {
     theme.init();
-    backendConnected = true; // Mocked for now
-    OnFileDrop((x: number, y: number, paths: string[]) => {
-      if (paths.length > 0) {
-        currentLibraryPath = paths[0];
-        console.log("Dropped path:", currentLibraryPath);
-      }
+    backendConnected = true;
+    OnFileDrop((_x: number, _y: number, paths: string[]) => {
+      console.log("OnFileDrop callback triggered with paths:", paths);
+      applyDroppedPaths(paths);
     }, true);
+    
+    // Load tracks if library path is already set
+    if (currentLibraryPath) {
+      loadTracks();
+    }
   });
 
   onDestroy(() => {
@@ -43,43 +92,70 @@
   });
 
   async function handleBrowse() {
-    // @ts-ignore - window.runtime is provided by Wails
-    const path = await window.runtime.OpenDirectoryDialog({
-      Title: $t("selectLibrary"),
-    });
-    if (path) {
-      currentLibraryPath = path;
-      console.log("Selected library:", path);
+    try {
+      const path = await OpenFolderDialog();
+      if (path) {
+        currentLibraryPath = path;
+        updateWindowTitle(path);
+        console.log("Selected library:", path);
+        await handleScan(path);
+      }
+    } catch (error) {
+      console.error("Failed to open folder dialog:", error);
     }
   }
 
-  // Mock data for initial layout testing
-  const mockTracks: Track[] = [
-    {
-      title: "Blinding Lights",
-      artist: "The Weeknd",
-      album: "After Hours",
-      year: 2020,
-      size: "8.4 MB",
-      path: "/Music/The Weeknd/After Hours/01 Blinding Lights.mp3",
-    },
-    {
-      title: "Levitating",
-      artist: "Dua Lipa",
-      album: "Future Nostalgia",
-      year: 2020,
-      size: "7.2 MB",
-      path: "/Music/Dua Lipa/Future Nostalgia/05 Levitating.mp3",
-    },
-    {
-      title: "Stay",
-      artist: "The Kid LAROI",
-      album: "F*CK LOVE",
-      year: 2021,
-      size: "5.1 MB",
-      path: "/Music/The Kid LAROI/Stay.mp3",
-    },
-  ];
+  async function handleScan(rootPath: string) {
+    try {
+      console.log("Starting scan for:", rootPath);
+      isLoadingTracks = true;
+      await ScanLibrary(rootPath);
+      console.log("Scan completed");
+      // Refresh track list after scan
+      await loadTracks();
+    } catch (error) {
+      console.error("Scan failed:", error);
+      isLoadingTracks = false;
+    }
+  }
+
+  async function loadTracks() {
+    if (!currentLibraryPath) {
+      tracks = [];
+      totalTrackCount = 0;
+      updateWindowTitle("");
+      return;
+    }
+    isLoadingTracks = true;
+    try {
+      const result = await ListTracks(currentLibraryPath, 100, 0);
+      if (result && result.Tracks) {
+        tracks = result.Tracks.map((t) => ({
+          ...t,
+          artist: t.artist_raw || "",
+          album: t.album_raw || "",
+        }));
+        totalTrackCount = result.Total ?? 0;
+        console.log("Loaded tracks:", tracks.length, "total:", result.Total);
+      }
+      updateWindowTitle(currentLibraryPath);
+    } catch (error) {
+      console.error("Failed to load tracks:", error);
+      tracks = [];
+      totalTrackCount = 0;
+    } finally {
+      isLoadingTracks = false;
+    }
+  }
+
+  function formatFileSize(bytes: number): string {
+    if (bytes === 0) return "0 B";
+    const k = 1024;
+    const sizes = ["B", "KB", "MB", "GB"];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i];
+  }
+
 </script>
 
 <div
@@ -109,14 +185,6 @@
               <FolderIcon size={16} />
               {$t("browse")}
             </button>
-
-            {#if currentLibraryPath}
-              <div
-                class="text-[11px] font-mono text-text-secondary bg-white/5 px-3 py-1.5 rounded-full truncate max-w-sm"
-              >
-                {currentLibraryPath}
-              </div>
-            {/if}
 
             <div class="relative flex-1 max-w-md group">
               <MagnifyingGlassIcon
@@ -168,9 +236,11 @@
                 : 'border-border bg-surface/30 hover:border-text-muted hover:bg-surface/50'}"
               role="button"
               tabindex="0"
+              data-file-drop-target
               style="--wails-drop-target: drop"
-              onmouseenter={() => (isDragOver = true)}
-              onmouseleave={() => (isDragOver = false)}
+              ondragover={(e) => { e.preventDefault(); isDragOver = true; }}
+              ondragleave={() => { isDragOver = false; }}
+              ondrop={(e) => { e.preventDefault(); isDragOver = false; }}
             >
               <div
                 class="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center text-accent"
@@ -206,53 +276,71 @@
           </div>
         {:else}
           <div class="h-full overflow-y-auto p-8 custom-scrollbar">
-            <div class="grid gap-2 max-w-5xl mx-auto">
-              {#each mockTracks as track}
-                <button
-                  onclick={() => {
-                    selectedTrack = track;
-                    // Just to satisfy lint warning for Greet
-                    Greet("User").then(console.log);
-                  }}
-                  class="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-border hover:bg-surface/30 transition-all text-left group
-                         {selectedTrack?.path === track.path
-                    ? 'bg-surface border-border ring-1 ring-accent/20'
-                    : ''}"
-                >
-                  <div
-                    class="w-11 h-11 bg-surface rounded-lg flex items-center justify-center border border-border group-hover:border-accent/30 transition-all group-hover:shadow-lg group-hover:shadow-accent/5"
+            {#if isLoadingTracks}
+              <div class="flex items-center justify-center h-full">
+                <div class="text-center">
+                  <div class="text-text-secondary mb-2">Scanning library...</div>
+                  <div class="text-[10px] text-text-muted">{currentLibraryPath}</div>
+                </div>
+              </div>
+            {:else if tracks.length === 0}
+              <div class="flex items-center justify-center h-full">
+                <div class="text-center">
+                  <div class="text-text-secondary mb-2">No tracks found</div>
+                  <div class="text-[10px] text-text-muted">Try scanning a folder with audio files</div>
+                </div>
+              </div>
+            {:else}
+              <div class="grid gap-2 max-w-5xl mx-auto">
+                {#each tracks as track}
+                  <button
+                    onclick={() => {
+                      selectedTrack = track;
+                    }}
+                    class="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-border hover:bg-surface/30 transition-all text-left group
+                           {selectedTrack?.path === track.path
+                      ? 'bg-surface border-border ring-1 ring-accent/20'
+                      : ''}"
                   >
-                    <FileAudioIcon
-                      size={20}
-                      weight="duotone"
-                      class="text-text-muted group-hover:text-accent transition-colors"
-                    />
-                  </div>
-                  <div class="flex-1 min-w-0">
                     <div
-                      class="font-bold text-text-primary truncate group-hover:text-accent transition-colors"
+                      class="w-11 h-11 bg-surface rounded-lg flex items-center justify-center border border-border group-hover:border-accent/30 transition-all group-hover:shadow-lg group-hover:shadow-accent/5"
                     >
-                      {track.title}
+                      <FileAudioIcon
+                        size={20}
+                        weight="duotone"
+                        class="text-text-muted group-hover:text-accent transition-colors"
+                      />
                     </div>
-                    <div class="text-xs text-text-secondary truncate mt-0.5">
-                      {track.artist} <span class="mx-1.5 opacity-30">•</span>
-                      {track.album}
+                    <div class="flex-1 min-w-0">
+                      <div
+                        class="font-bold text-text-primary truncate group-hover:text-accent transition-colors"
+                      >
+                        {track.title}
+                      </div>
+                      <div class="text-xs text-text-secondary truncate mt-0.5">
+                        {track.artist || "Unknown Artist"} <span class="mx-1.5 opacity-30">•</span>
+                        {track.album || "Unknown Album"}
+                      </div>
                     </div>
-                  </div>
-                  <div
-                    class="text-[11px] font-mono font-bold text-text-muted opacity-50 bg-white/5 px-2 py-1 rounded group-hover:opacity-100 transition-all"
-                  >
-                    {track.size}
-                  </div>
-                </button>
-              {/each}
-            </div>
+                    <div
+                      class="text-[11px] font-mono font-bold text-text-muted opacity-50 bg-white/5 px-2 py-1 rounded group-hover:opacity-100 transition-all"
+                    >
+                      {formatFileSize(track.size)}
+                    </div>
+                  </button>
+                {/each}
+              </div>
+            {/if}
           </div>
         {/if}
       </div>
     </main>
 
-    <StatusBar connected={backendConnected} />
+    <StatusBar
+      tracked={totalTrackCount}
+      cleaned={0}
+      hasLibrary={!!currentLibraryPath}
+    />
   </div>
 
   <ContextPanel bind:selectedTrack />
