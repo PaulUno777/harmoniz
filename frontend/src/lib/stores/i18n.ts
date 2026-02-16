@@ -1,0 +1,76 @@
+import { writable, derived } from 'svelte/store';
+
+export type Locale = 'en' | 'fr';
+
+export const locale = writable<Locale>('en');
+
+const translations = {
+  en: {
+    library: 'Library',
+    organizer: 'Organizer',
+    cleaner: 'Cleaner',
+    settings: 'Settings',
+    browse: 'Browse',
+    search: 'Search tracks, artists, albums...',
+    details: 'Details',
+    title: 'Title',
+    artist: 'Artist',
+    year: 'Year',
+    path: 'Path',
+    size: 'Size',
+    saveChanges: 'Save Changes',
+    noFolderSelected: 'No folder selected',
+    selectLibrary: 'Select Music Library',
+    emptyStateTitle: 'Open a music folder to get started',
+    emptyStateSubtitle: 'Select your music library to organize, tag, and deduplicate tracks.',
+    openFolder: 'Open folder',
+    dropZone: 'Or drag and drop your music folder here',
+    connected: 'Connected',
+    disconnected: 'Disconnected',
+    appearance: 'Appearance',
+    theme: 'Theme',
+    dark: 'Dark',
+    light: 'Light',
+    system: 'System',
+    language: 'Language',
+    appLanguage: 'App Language',
+    changeLanguage: 'Change the interface language.',
+    about: 'About',
+    checkForUpdates: 'Check for Updates'
+  },
+  fr: {
+    library: 'Bibliothèque',
+    organizer: 'Organiseur',
+    cleaner: 'Nettoyeur',
+    settings: 'Paramètres',
+    browse: 'Parcourir',
+    search: 'Rechercher morceaux, artistes, albums...',
+    details: 'Détails',
+    title: 'Titre',
+    artist: 'Artiste',
+    year: 'Année',
+    path: 'Chemin',
+    size: 'Taille',
+    saveChanges: 'Enregistrer',
+    noFolderSelected: 'Aucun dossier sélectionné',
+    selectLibrary: 'Sélectionner la bibliothèque musicale',
+    emptyStateTitle: 'Ouvrez un dossier musical pour commencer',
+    emptyStateSubtitle: 'Sélectionnez votre bibliothèque musicale pour organiser vos morceaux.',
+    openFolder: 'Ouvrir un dossier',
+    dropZone: 'Ou glissez-déposez votre dossier ici',
+    connected: 'Connecté',
+    disconnected: 'Déconnecté',
+    appearance: 'Apparence',
+    theme: 'Thème',
+    dark: 'Sombre',
+    light: 'Clair',
+    system: 'Système',
+    language: 'Langue',
+    appLanguage: 'Langue de l\'application',
+    changeLanguage: 'Changer la langue de l\'interface.',
+    about: 'À propos',
+    checkForUpdates: 'Vérifier les mises à jour'
+  }
+};
+
+export const t = derived(locale, ($locale) => (key: keyof typeof translations['en']) => translations[$locale][key] || key);
