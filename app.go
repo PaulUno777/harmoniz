@@ -5,6 +5,7 @@ import (
 	"harmoniz/internal/core/domain"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
+	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -29,10 +30,11 @@ func (a *App) startup(ctx context.Context) {
 	logger.Log.Info("Wails App Started Successfully")
 }
 
-// ScanLibrary scans a music library folder and imports tracks into the database
+// ScanLibrary ensures the library is synced then scans. If the last sync for this root
+// was more than 24h ago (or no data), all tracks for that root are removed and re-scanned from disk.
 func (a *App) ScanLibrary(root string) error {
 	logger.Log.Info("ScanLibrary called", "root", root)
-	err := a.scanner.Scan(a.ctx, root)
+	err := a.scanner.PrepareLibrarySync(a.ctx, root, 24*time.Hour)
 	if err == nil && a.ctx != nil {
 		runtime.EventsEmit(a.ctx, "scan:done", root)
 	}
@@ -53,7 +55,9 @@ func (a *App) OpenFolderDialog() (string, error) {
 func (a *App) ListTracks(root string, limit, offset int) (*domain.ListTracksResult, error) {
 	tracks, total, err := a.scanner.ListTracks(a.ctx, root, limit, offset)
 	if err != nil {
+		logger.Log.Error("ListTracks failed", "error", err)
 		return nil, err
 	}
+	logger.Log.Info("ListTracks returned", "tracks", len(tracks), "total", total)
 	return &domain.ListTracksResult{Tracks: tracks, Total: total}, nil
 }

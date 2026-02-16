@@ -25,6 +25,26 @@ func NewService(repo ports.TrackRepository) *Service {
 	return &Service{repo: repo}
 }
 
+// PrepareLibrarySync ensures the DB for this root is fresh. If the most recent added_at
+// is older than maxAge (or there are no tracks), all tracks under root are deleted and
+// a full scan is run. Otherwise nothing is done. Use this when opening/browsing a library.
+func (s *Service) PrepareLibrarySync(ctx context.Context, root string, maxAge time.Duration) error {
+	latest, err := s.repo.LatestAddedAtForRoot(ctx, root)
+	if err != nil {
+		return fmt.Errorf("checking library staleness: %w", err)
+	}
+	needResync := latest == 0 || time.Since(time.Unix(latest, 0)) > maxAge
+	if !needResync {
+		logger.Log.Info("Library still fresh, skipping re-sync", "root", root)
+		return nil
+	}
+	logger.Log.Info("Library stale or empty, re-syncing from disk", "root", root)
+	if err := s.repo.DeleteTracksForRoot(ctx, root); err != nil {
+		return fmt.Errorf("deleting stale tracks: %w", err)
+	}
+	return s.Scan(ctx, root)
+}
+
 func (s *Service) Scan(ctx context.Context, root string) error {
 	logger.Log.Info("Starting scan", "root", root)
 	startTime := time.Now()
@@ -115,7 +135,7 @@ func (s *Service) Scan(ctx context.Context, root string) error {
 	default:
 	}
 
-	logger.Log.Info("Scan completed", "duration", time.Since(startTime))
+	logger.Log.Info("Scan completed", "duration", time.Since(startTime).String())
 	return nil
 }
 

@@ -2,10 +2,12 @@ package db
 
 import (
 	"context"
+	"database/sql"
 	"harmoniz/internal/core/domain"
 	"harmoniz/internal/core/ports"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // Ensure Adapter implements ports.TrackRepository
@@ -19,12 +21,13 @@ func (a *Adapter) BatchUpsert(tracks []domain.Track) error {
 	}
 	defer tx.Rollback()
 
+	now := time.Now().Unix()
 	query := `
 		INSERT INTO tracks (
-			path, filename, size, mod_time, 
+			path, filename, size, mod_time, added_at,
 			artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, 
 			hash_partial, status
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(path) DO UPDATE SET
 			size = excluded.size,
 			mod_time = excluded.mod_time,
@@ -46,8 +49,12 @@ func (a *Adapter) BatchUpsert(tracks []domain.Track) error {
 	defer stmt.Close()
 
 	for _, t := range tracks {
+		addedAt := t.AddedAt
+		if addedAt == 0 {
+			addedAt = now
+		}
 		_, err := stmt.Exec(
-			t.Path, t.Filename, t.Size, t.ModTime,
+			t.Path, t.Filename, t.Size, t.ModTime, addedAt,
 			t.ArtistRaw, t.ArtistNorm, t.AlbumRaw, t.AlbumNorm, t.Title, t.Year, t.TrackNum,
 			t.HashPartial, t.Status,
 		)
@@ -96,7 +103,7 @@ func (a *Adapter) ListTracks(ctx context.Context, root string, limit, offset int
 		return nil, 0, err
 	}
 
-	sel := "SELECT id, path, filename, size, mod_time, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks " + baseCond + " ORDER BY path LIMIT ? OFFSET ?"
+	sel := "SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks " + baseCond + " ORDER BY path LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 	rows, err := a.Conn.QueryContext(ctx, sel, args...)
 	if err != nil {
@@ -107,16 +114,46 @@ func (a *Adapter) ListTracks(ctx context.Context, root string, limit, offset int
 	var tracks []domain.Track
 	for rows.Next() {
 		var t domain.Track
+		var bitrate sql.NullInt64
+		var hashFull, fingerprint, deleteReason sql.NullString
 		if err := rows.Scan(
-			&t.ID, &t.Path, &t.Filename, &t.Size, &t.ModTime,
-			&t.ArtistRaw, &t.ArtistNorm, &t.AlbumRaw, &t.AlbumNorm, &t.Title, &t.Year, &t.TrackNum, &t.Bitrate,
-			&t.HashPartial, &t.HashFull, &t.Fingerprint, &t.IsDeleted, &t.DeletedAt, &t.DeleteReason, &t.Status,
+			&t.ID, &t.Path, &t.Filename, &t.Size, &t.ModTime, &t.AddedAt,
+			&t.ArtistRaw, &t.ArtistNorm, &t.AlbumRaw, &t.AlbumNorm, &t.Title, &t.Year, &t.TrackNum, &bitrate,
+			&t.HashPartial, &hashFull, &fingerprint, &t.IsDeleted, &t.DeletedAt, &deleteReason, &t.Status,
 		); err != nil {
 			return nil, 0, err
+		}
+		if bitrate.Valid {
+			t.Bitrate = int(bitrate.Int64)
+		}
+		if hashFull.Valid {
+			t.HashFull = hashFull.String
+		}
+		if fingerprint.Valid {
+			t.Fingerprint = fingerprint.String
+		}
+		if deleteReason.Valid {
+			t.DeleteReason = deleteReason.String
 		}
 		tracks = append(tracks, t)
 	}
 	return tracks, total, nil
+}
+
+// LatestAddedAtForRoot returns the most recent added_at (Unix) for tracks under root. Returns 0 if none.
+func (a *Adapter) LatestAddedAtForRoot(ctx context.Context, root string) (int64, error) {
+	normalized := strings.TrimRight(filepath.Clean(root), "/\\")
+	query := `SELECT COALESCE(MAX(added_at), 0) FROM tracks WHERE is_deleted = 0 AND (path = ? OR path LIKE ?)`
+	var latest int64
+	err := a.Conn.QueryRowContext(ctx, query, normalized, normalized+"/%").Scan(&latest)
+	return latest, err
+}
+
+// DeleteTracksForRoot hard-deletes all tracks under root (path = root or path LIKE root/%).
+func (a *Adapter) DeleteTracksForRoot(ctx context.Context, root string) error {
+	normalized := strings.TrimRight(filepath.Clean(root), "/\\")
+	_, err := a.Conn.ExecContext(ctx, `DELETE FROM tracks WHERE path = ? OR path LIKE ?`, normalized, normalized+"/%")
+	return err
 }
 
 // Stub implementations for Phase 2 - will be implemented in later phases

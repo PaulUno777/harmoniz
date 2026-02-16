@@ -21,10 +21,10 @@ todos:
     content: "Phase 2 Approval: Request user approval before proceeding to Phase 3"
     status: pending
   - id: phase3-list-tracks
-    content: "Phase 3: Display track list - Implement ListTracks in repository and UI, update frontend to use real data"
-    status: pending
+    content: "Phase 3: Display track list - ListTracks + basic UI done; add infinite scroll + virtual list for optimization"
+    status: in_progress
   - id: phase3-test
-    content: "Phase 3 Test: Run through all validation criteria - backend method, frontend integration, data display, performance"
+    content: "Phase 3 Test: Run through all validation criteria - virtual list, infinite scroll, current path display, performance"
     status: pending
   - id: phase3-approval
     content: "Phase 3 Approval: Request user approval before proceeding to Phase 4"
@@ -36,9 +36,9 @@ isProject: false
 
 ## Current State
 
-- **Frontend**: Clean Svelte 5 + TailwindCSS implementation with UI components
-- **Backend**: Minimal Wails setup with `main.go` and `app.go` (only has `Greet` method)
-- **Backup**: Full implementation in `context/harmoniz-backup/` with hexagonal architecture
+- **Frontend**: Svelte 5 + TailwindCSS; library tab shows current path, browse/drag-drop, and a simple track grid (no virtual list or infinite scroll yet).
+- **Backend**: Wails app with DB, scanner, `ListTracks(root, limit, offset)`, `ScanLibrary` (with 24h staleness re-sync: if `added_at` is older than 24h, tracks for that root are deleted and re-scanned).
+- **Backup**: Full implementation in `context/harmoniz-backup/` with hexagonal architecture; reference for VirtualTable (`@tanstack/svelte-virtual`) and infinite-scroll approach.
 
 ## Architecture Overview
 
@@ -77,26 +77,24 @@ The backup follows **Hexagonal Architecture**:
 
 **Validation Criteria:**
 
-1. **Build & Run Test:**
+1. **Build & Run**
 
-- `wails dev` starts without errors
-- No Go compilation errors
-- Application window opens successfully
+- `wails dev` starts without errors; no Go compilation errors; application window opens.
 
-1. **Database Creation:**
+1. **Database Creation**
 
 - Database file created at `~/.harmoniz/library.db`
 - File exists and is readable
 - File size > 0 bytes
 
-1. **Migration Execution:**
+1. **Migration Execution**
 
 - Migration runs without errors
 - `schema_migrations` table exists
 - Version 1 recorded in `schema_migrations` table
 - `tracks` table exists with correct schema
 
-1. **Schema Verification** (using SQLite CLI or browser):
+1. **Schema Verification** (SQLite CLI or browser)
 
 ```sql
  -- Run these queries to verify:
@@ -105,7 +103,7 @@ The backup follows **Hexagonal Architecture**:
  SELECT version FROM schema_migrations;  -- Should return 1
 ```
 
-1. **Code Quality:**
+1. **Code Quality**
 
 - No console errors in terminal
 - Logger outputs structured JSON logs
@@ -137,27 +135,25 @@ The backup follows **Hexagonal Architecture**:
 
 **Validation Criteria:**
 
-1. **Build & Run Test:**
+1. **Build & Run**
 
-- `wails dev` starts without errors
-- No Go compilation errors
-- Application window opens successfully
+- `wails dev` starts without errors; no Go compilation errors; application window opens.
 
-1. **Folder Dialog:**
+1. **Folder Dialog**
 
 - Click "Browse" button opens native folder picker
 - Selecting a folder returns the path
 - Path displays in UI after selection
-- Canceling dialog doesn't crash app
+- Canceling dialog doesn't crash app.
 
-1. **Scanning Functionality:**
+1. **Scanning**
 
 - `ScanLibrary()` method exists and is callable from frontend
 - Scan starts when folder is selected (or button clicked)
 - Scan completes without errors (check terminal logs)
-- Progress/status visible in UI (if implemented)
+- Progress/status visible in UI (if implemented).
 
-1. **Database Verification:**
+1. **Database**
 
 - Tracks inserted into database
 - Query database: `SELECT COUNT(*) FROM tracks WHERE is_deleted = 0;` returns > 0
@@ -168,26 +164,26 @@ The backup follows **Hexagonal Architecture**:
 - `hash_partial` populated for scanned files
 - `mod_time` matches file system modification time
 
-1. **File Format Support:**
+1. **File formats**
 
 - `.mp3` files scanned correctly
 - `.flac` files scanned correctly (if available)
 - `.m4a` files scanned correctly (if available)
-- Non-audio files ignored
+- Non-audio files ignored.
 
-1. **Performance:**
+1. **Performance**
 
 - Scan completes in reasonable time (< 1 second per 100 files)
 - No UI freezing during scan
-- Memory usage stable
+- Memory usage stable.
 
-1. **Error Handling:**
+1. **Error handling**
 
 - Corrupt files logged but don't crash scan
 - Invalid paths handled gracefully
 - Scan can be canceled (if implemented)
 
-1. **Caching:**
+1. **Caching**
 
 - Re-scanning same folder skips unchanged files (check logs)
 - Modified files re-processed
@@ -196,26 +192,89 @@ The backup follows **Hexagonal Architecture**:
 
 ---
 
-### Phase 3: Display Track List
+### Phase 3: Display Track List (current path) with Infinite Scroll + Virtual List
 
-**Goal**: Display scanned tracks in the UI with pagination
+**Goal**: Display the current browsed path’s tracked audio in the UI with **infinite scroll** (load more as user scrolls) and a **virtual list** (only render visible rows) for performance. Align with the approach used in `context/harmoniz-backup` (VirtualTable + `@tanstack/svelte-virtual`).
 
-**Files to create/copy:**
+**Done so far:**
 
-- `internal/adapters/db/track_repository.go` - Implement `ListTracks()` method
-- `internal/core/domain/track.go` - Add `ListTracksResult` struct
+- Backend: `ListTracks(root, limit, offset)` in repository and `app.go`
+- Frontend: Loads first page (e.g. 100 tracks), shows current path, displays tracks in a simple grid
+- StatusBar shows total track count for current library
+
+**Remaining work:**
+
+1. **Virtual list**
+
+- Add dependency: `@tanstack/svelte-virtual` (same as backup).
+- Introduce a virtualized track list component that renders only visible rows (fixed row height, e.g. ~36–44px).
+- Use a single scrollable container; total height = `rowCount * rowHeight`; position rows with `transform: translateY()`.
+
+1. **Infinite scroll**
+
+- Keep a single “tracks” array that accumulates pages.
+- When the user scrolls near the bottom (e.g. within 1–2 screens), call `ListTracks(currentLibraryPath, pageSize, offset)` and append the next page.
+- Use `total` from the first/current response to know when to stop requesting.
+- Avoid duplicate requests (e.g. guard with “loading more” or “has no more” flags).
+
+1. **UI**
+
+- Current path stays visible (already in top bar).
+- Track list shows: title, artist, album, size (and optionally filename, bitrate).
+- Row click selects track and opens context panel (already in place).
+- Optional: sticky header row (e.g. #, Title, Artist, Album, Size) for table-style layout.
+
+**Files to create:**
+
+- `frontend/src/lib/components/library/VirtualTrackList.svelte` (or similar) – virtual list + infinite scroll, consumes `tracks`, `total`, `loading`, `onLoadMore(offset)`.
 
 **Changes to existing:**
 
-- `internal/adapters/ui/app.go` - Add `ListTracks()` method
-- `frontend/src/App.svelte` - Replace mock tracks with backend `ListTracks()` call
-- Add pagination/infinite scroll if needed
+- `frontend/package.json` – add `@tanstack/svelte-virtual`.
+- `frontend/src/App.svelte` – use virtual list component; replace single `loadTracks()` with initial load + “load more” when scrolling (infinite scroll); pass current path and track data.
 
-**Test**:
+**Reference (backup):**
 
-- Track list displays real data from database
-- Pagination works (if implemented)
-- Track details show correctly
+- `context/harmoniz-backup/frontend/src/lib/components/organizer/VirtualTable.svelte` – uses `createVirtualizer` from `@tanstack/svelte-virtual`, fixed row height 36px, overscan 10.
+- Backup loads one big page (e.g. 10000) into store; we will use incremental loading instead for true infinite scroll.
+
+**Phase 3 Validation Criteria (verify before approval):**
+
+1. **Current path display**
+
+- Browsed folder path is visible in the UI (e.g. top bar or content area).
+- After scan or drop, the path reflects the current library root.
+
+1. **Track list shows current path’s audio only**
+
+- List shows only tracks under the current library path (no other roots).
+- Total count in StatusBar (or UI) matches backend `ListTracks(..., total)` for that root.
+
+1. **Virtual list**
+
+- A virtual list is used (e.g. `@tanstack/svelte-virtual`): only a window of rows is rendered (DOM node count much smaller than total track count).
+- With 500+ tracks, only on the order of tens of rows in DOM (e.g. visible + overscan).
+- Scrolling through a large list is smooth (no obvious jank).
+
+1. **Infinite scroll**
+
+- Initial load fetches first page (e.g. limit 100–200).
+- Scrolling near the bottom loads the next page and appends to the list.
+- When all pages are loaded (offset + limit ≥ total), no further requests are made.
+- No duplicate requests for the same range (guarded by loading / hasMore state).
+
+1. **Data and interaction**
+
+- Each row shows at least: title, artist, album, size (or equivalent).
+- Clicking a row selects the track and updates the context panel (if implemented).
+- Empty state: when there are no tracks, a clear message is shown.
+
+1. **Build and stability**
+
+- `wails dev` runs without errors; no console errors in normal flow.
+- Changing library (browse/drop) clears or replaces the list and shows the new library’s tracks.
+
+**APPROVAL REQUIRED**: After Phase 3 completion, verify all criteria above and explicitly approve before proceeding to Phase 4.
 
 ---
 
@@ -267,7 +326,7 @@ require (
 
 - **Database location**: `~/.harmoniz/library.db` (configurable)
 - **Concurrency**: Scanner uses worker pool pattern (`runtime.NumCPU() * 4`)
-- **Caching**: Scanner skips files if `ModTime` matches database
+- **Caching**: Scanner skips files if `ModTime` matches database. **Staleness re-sync**: `tracks.added_at` records when a track was first added; if the latest `added_at` for a root is older than 24h, `ScanLibrary` deletes all tracks for that root and re-scans (rsync-style).
 - **Error handling**: Scanner logs errors but continues (never crashes)
 - **File formats**: Supports `.mp3`, `.flac`, `.m4a`, `.ogg`, `.wav`
 

@@ -8,15 +8,15 @@
 - ✅ `internal/core/ports/filesystem.go` - Filesystem interface
 
 ### Scanner Service
-- ✅ `internal/core/services/scanner/scanner.go` - Scanner service with worker pool
+- ✅ `internal/core/services/scanner/scanner.go` - Scanner service with worker pool, plus `PrepareLibrarySync()` for staleness check (24h re-sync)
 
 ### Updated Files
-- ✅ `internal/adapters/db/track_repository.go` - Added `BatchUpsert()` and `GetAllPathsModTime()` methods, plus stub implementations for other interface methods
-- ✅ `app.go` - Added `ScanLibrary()`, `OpenFolderDialog()`, and `ListTracks()` methods
+- ✅ `internal/adapters/db/track_repository.go` - Added `BatchUpsert()`, `GetAllPathsModTime()`, `LatestAddedAtForRoot()`, `DeleteTracksForRoot()`; migration 002 adds `added_at` to tracks
+- ✅ `app.go` - Added `ScanLibrary()` (uses PrepareLibrarySync), `OpenFolderDialog()`, `ListTracks()`
 - ✅ `main.go` - Wired scanner service
-- ✅ `frontend/src/App.svelte` - Replaced mock `handleBrowse()` with real backend calls, added scan and load tracks functionality
-- ✅ `frontend/src/lib/types.ts` - Updated `Track` interface to match backend model
-- ✅ `go.mod` - Added dependency: `github.com/dhowden/tag`
+- ✅ `frontend/src/App.svelte` - Real `handleBrowse()`, drag-and-drop folder, scan + load tracks, current path display
+- ✅ `frontend/src/lib/types.ts` - `Track` interface aligned with backend
+- ✅ `go.mod` - Added `github.com/dhowden/tag`
 
 ## What Was Done
 
@@ -27,11 +27,13 @@
    - Smart caching (skips files if `ModTime` matches database)
    - Batch upsert (500 tracks per batch)
    - Supports `.mp3`, `.flac`, `.m4a`, `.ogg`, `.wav`
-4. **Repository Methods**: Implemented `BatchUpsert()` and `GetAllPathsModTime()` for scanning
-5. **Frontend Integration**: 
+4. **Repository Methods**: `BatchUpsert()`, `GetAllPathsModTime()` for scanning; `LatestAddedAtForRoot()` and `DeleteTracksForRoot()` for 24h staleness re-sync.
+5. **Staleness re-sync**: `ScanLibrary()` calls `PrepareLibrarySync(root, 24h)`. If the most recent `added_at` for that root is older than 24h (or no tracks), all tracks for that root are deleted and a full scan runs. Otherwise scan is skipped (log: "Library still fresh, skipping re-sync").
+6. **Frontend Integration**:
    - Real folder dialog via `OpenFolderDialog()`
-   - Automatic scanning when folder selected
-   - Track list loads from database after scan
+   - Drag-and-drop folder on empty state (same action as Browse)
+   - Automatic scan when folder selected or dropped
+   - Track list loads from DB after scan; current path and total count shown
    - Loading states and error handling
 
 ## Testing Instructions
@@ -49,79 +51,90 @@ wails dev
 
 ### Step 3: Validation Checklist
 
-#### ✅ Build & Run Test
+Use this list to validate Phase 2 before approval. Check each item after testing.
+
+#### 1. Build & Run
 - [ ] `wails dev` starts without errors
 - [ ] No Go compilation errors
 - [ ] Application window opens successfully
 
-#### ✅ Folder Dialog
-- [ ] Click "Browse" button opens native folder picker
-- [ ] Selecting a folder returns the path
-- [ ] Path displays in UI after selection
-- [ ] Canceling dialog doesn't crash app
+#### 2. Folder Dialog
+- [ ] Click "Browse" (top bar or empty state) opens native folder picker
+- [ ] Selecting a folder returns the path and path displays in UI
+- [ ] Canceling dialog does not crash the app
 
-#### ✅ Scanning Functionality
-- [ ] `ScanLibrary()` method exists and is callable from frontend
-- [ ] Scan starts when folder is selected (or button clicked)
-- [ ] Scan completes without errors (check terminal logs)
-- [ ] Progress/status visible in UI (loading indicator shows)
+#### 3. Drag & Drop (optional but implemented)
+- [ ] Dragging a folder onto the empty-state drop zone shows visual feedback
+- [ ] Dropping the folder sets the library path and triggers scan (same as Browse)
 
-#### ✅ Database Verification
-- [ ] Tracks inserted into database
-- [ ] Query database: `SELECT COUNT(*) FROM tracks WHERE is_deleted = 0;` returns > 0
-- [ ] Sample track has correct metadata:
+#### 4. Scanning
+- [ ] `ScanLibrary()` is callable from frontend (runs when folder selected or dropped)
+- [ ] Scan starts and completes without errors (check terminal logs)
+- [ ] Loading/status visible in UI (e.g. "Scanning library..." or similar)
+- [ ] After scan, track list loads and displays (first page)
+
+#### 5. Database
+- [ ] Tracks are inserted: `SELECT COUNT(*) FROM tracks WHERE is_deleted = 0;` returns > 0
+- [ ] Sample row has expected columns, e.g.:
   ```sql
-  SELECT path, title, artist_raw, size FROM tracks LIMIT 1;
+  SELECT path, title, artist_raw, size, hash_partial, mod_time FROM tracks LIMIT 1;
   ```
-- [ ] `hash_partial` populated for scanned files
-- [ ] `mod_time` matches file system modification time
+- [ ] `hash_partial` is populated for scanned files
+- [ ] `mod_time` matches file modification time; `added_at` is set (migration 002)
 
-#### ✅ File Format Support
-- [ ] `.mp3` files scanned correctly
-- [ ] `.flac` files scanned correctly (if available)
-- [ ] `.m4a` files scanned correctly (if available)
-- [ ] Non-audio files ignored
+#### 6. File Formats
+- [ ] `.mp3` files are scanned
+- [ ] `.flac` / `.m4a` (if available) are scanned
+- [ ] `.ogg` / `.wav` are supported (scanner includes them)
+- [ ] Non-audio files are ignored
 
-#### ✅ Performance
-- [ ] Scan completes in reasonable time (< 1 second per 100 files)
-- [ ] No UI freezing during scan
-- [ ] Memory usage stable
+#### 7. Performance
+- [ ] Scan completes in reasonable time (e.g. &lt; ~1 s per 100 files on typical hardware)
+- [ ] UI does not freeze during scan
+- [ ] Memory usage remains stable
 
-#### ✅ Error Handling
-- [ ] Corrupt files logged but don't crash scan (check terminal logs)
-- [ ] Invalid paths handled gracefully
-- [ ] Scan can be canceled (if implemented)
+#### 8. Error Handling
+- [ ] Corrupt or unreadable files are logged but do not stop the scan
+- [ ] Invalid or missing paths are handled without crashing
+- [ ] (Optional) Scan cancel is not required for Phase 2 sign-off
 
-#### ✅ Caching
-- [ ] Re-scanning same folder skips unchanged files (check logs for "Cache hit" messages)
-- [ ] Modified files re-processed
+#### 9. Caching & Staleness
+- [ ] Re-scanning the **same** folder with **no file changes** skips unchanged files (e.g. second scan faster; no "Cache hit" log—scanner skips silently)
+- [ ] If you re-scan after 24h (or clear DB), a full re-sync runs (tracks for that root deleted then re-scanned); otherwise log may show "Library still fresh, skipping re-sync"
+- [ ] Modifying a file on disk and re-scanning causes that file to be re-processed
 
-#### ✅ Frontend Display
-- [ ] Track list displays after scan completes
-- [ ] Track titles display correctly
-- [ ] Artist names display correctly
-- [ ] Album names display correctly
-- [ ] File sizes display correctly (formatted as MB/KB)
-- [ ] Empty state shows when no tracks found
+#### 10. Frontend Display
+- [ ] Current library path is visible (e.g. in top bar)
+- [ ] Track list appears after scan (titles, artist, album, size)
+- [ ] StatusBar or UI shows total track count for current library
+- [ ] Empty state when no tracks (e.g. "No tracks found" / try scanning)
+- [ ] Selecting a track updates the context panel (if implemented)
 
 ## Expected Terminal Output
 
-When scanning, you should see logs like:
+When scanning, you should see logs similar to:
 ```json
+{"level":"INFO","msg":"ScanLibrary called","root":"/path/to/music"}
+{"level":"INFO","msg":"Library stale or empty, re-syncing from disk","root":"/path/to/music"}
 {"level":"INFO","msg":"Starting scan","root":"/path/to/music"}
 {"level":"INFO","msg":"Cache loaded","entries":0}
 {"level":"INFO","msg":"Spawning workers","count":16}
 {"level":"INFO","msg":"Scan completed","duration":"2.5s"}
 ```
 
+If you scan the same folder again within 24h and no files changed:
+```json
+{"level":"INFO","msg":"Library still fresh, skipping re-sync","root":"/path/to/music"}
+```
+
 ## Next Steps
 
-Once all validation criteria are met and you approve Phase 2, we will proceed to **Phase 3: Display Track List** (Note: ListTracks is already implemented, but we can enhance pagination and filtering if needed).
+After all validation criteria above are checked and you approve Phase 2, proceed to **Phase 3: Display Track List** — add **infinite scroll** and a **virtual list** (e.g. `@tanstack/svelte-virtual`) so the current path’s tracks scale to large libraries without jank. See `.cursor/plans/progressive_backend_integration_plan_eb6d9226.plan.md` for Phase 3 scope and validation.
 
 ## Notes
 
-- Scanner uses worker pool for concurrent processing
-- Files are cached based on modification time - unchanged files are skipped
-- Batch inserts improve performance (500 tracks per transaction)
-- Frontend automatically loads tracks after scan completes
-- Drag & drop also triggers scan automatically
+- Scanner uses a worker pool (`runtime.NumCPU() * 4`).
+- Caching: files are skipped when `mod_time` matches DB; no "Cache hit" log.
+- Batch inserts: 500 tracks per transaction.
+- Staleness: if latest `added_at` for the root is &gt; 24h (or no tracks), all tracks for that root are deleted and a full scan runs.
+- Frontend: browse and drag-and-drop both set path and trigger scan; tracks load from `ListTracks()` after scan.

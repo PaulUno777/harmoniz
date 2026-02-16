@@ -40,6 +40,14 @@ type TrackRepository interface {
 	// If root is empty, all non-deleted tracks are returned. total is the full count matching the filter.
 	ListTracks(ctx context.Context, root string, limit, offset int) ([]domain.Track, int, error)
 
+	// LatestAddedAtForRoot returns the most recent added_at (Unix timestamp) among tracks under root.
+	// Returns 0 if no tracks. Used for staleness check before full re-sync.
+	LatestAddedAtForRoot(ctx context.Context, root string) (int64, error)
+
+	// DeleteTracksForRoot hard-deletes all tracks under root (path = root OR path LIKE root/%).
+	// Used when re-syncing from disk after data is considered stale.
+	DeleteTracksForRoot(ctx context.Context, root string) error
+
 	// GetPathToIDMap returns a map of Path -> ID for all active tracks.
 	GetPathToIDMap(ctx context.Context) (map[string]uint64, error)
 }

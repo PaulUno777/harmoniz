@@ -18,7 +18,8 @@ type Track struct {
 	Path     string `json:"path"`
 	Filename string `json:"filename"`
 	Size     int64  `json:"size"`
-	ModTime  int64  `json:"mod_time"` // Unix timestamp
+	ModTime  int64  `json:"mod_time"` // Unix timestamp (file mtime)
+	AddedAt  int64  `json:"added_at"` // Unix timestamp when first added to DB (for staleness check)
 
 	// Metadata
 	ArtistRaw  string `json:"artist_raw"`

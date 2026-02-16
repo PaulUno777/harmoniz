@@ -6,6 +6,7 @@ export namespace domain {
 	    filename: string;
 	    size: number;
 	    mod_time: number;
+	    added_at: number;
 	    artist_raw: string;
 	    artist_norm: string;
 	    album_raw: string;
@@ -33,6 +34,7 @@ export namespace domain {
 	        this.filename = source["filename"];
 	        this.size = source["size"];
 	        this.mod_time = source["mod_time"];
+	        this.added_at = source["added_at"];
 	        this.artist_raw = source["artist_raw"];
 	        this.artist_norm = source["artist_norm"];
 	        this.album_raw = source["album_raw"];
