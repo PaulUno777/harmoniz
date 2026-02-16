@@ -11,6 +11,7 @@
   import type { Track } from '../../types'
   import { t as translateStore } from '../../stores/i18n'
   import { get } from 'svelte/store'
+  import { formatFileSize } from '../../utils/format'
 
   interface Props {
     selectedTrack: Track | null
@@ -73,7 +74,7 @@
               <HashIcon size={12} /> {t('size')}
             </label>
             <div class="px-3 py-2 text-sm text-text-secondary bg-background border border-border rounded-md opacity-50">
-              {selectedTrack.size}
+              {formatFileSize(selectedTrack.size)}
             </div>
           </div>
         </div>

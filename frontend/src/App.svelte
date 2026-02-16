@@ -151,8 +151,8 @@
 >
   <Sidebar bind:activeTab />
 
-  <div class="flex-1 flex flex-col min-w-0 bg-background relative">
-    <main class="flex-1 flex flex-col min-w-0 relative">
+  <div class="flex-1 flex flex-col min-w-0 min-h-0 bg-background relative overflow-hidden">
+    <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
       <TopBar {activeTab} onBrowse={handleBrowse} />
 
       <div
@@ -176,12 +176,16 @@
       </div>
     </main>
 
-    <StatusBar
-      tracked={totalTrackCount}
-      cleaned={0}
-      hasLibrary={!!currentLibraryPath}
-    />
+    <footer class="shrink-0">
+      <StatusBar
+        tracked={totalTrackCount}
+        cleaned={0}
+        hasLibrary={!!currentLibraryPath}
+      />
+    </footer>
   </div>
 
-  <ContextPanel bind:selectedTrack />
+  <aside class="w-80 shrink-0 h-full overflow-hidden flex flex-col">
+    <ContextPanel bind:selectedTrack />
+  </aside>
 </div>

@@ -44,7 +44,12 @@ const translations = {
     matchingSystemPreference: 'Matching your operating system preference.',
     latestVersion: 'You are on the latest version!',
     checking: 'Checking...',
-    aboutDescription: 'A premium tool for music library organization.'
+    aboutDescription: 'A premium tool for music library organization.',
+    scanningLibrary: 'Scanning library...',
+    noTracksFound: 'No tracks found',
+    tryScanningFolder: 'Try scanning a folder with audio files',
+    unknownArtist: 'Unknown Artist',
+    unknownAlbum: 'Unknown Album'
   },
   fr: {
     library: 'Bibliothèque',
@@ -85,7 +90,12 @@ const translations = {
     matchingSystemPreference: 'Correspond à la préférence de votre système d\'exploitation.',
     latestVersion: 'Vous utilisez la dernière version !',
     checking: 'Vérification...',
-    aboutDescription: 'Un outil premium pour l\'organisation de bibliothèques musicales.'
+    aboutDescription: 'Un outil premium pour l\'organisation de bibliothèques musicales.',
+    scanningLibrary: 'Analyse de la bibliothèque...',
+    noTracksFound: 'Aucun morceau trouvé',
+    tryScanningFolder: 'Essayez d\'analyser un dossier contenant des fichiers audio',
+    unknownArtist: 'Artiste inconnu',
+    unknownAlbum: 'Album inconnu'
   }
 };
 
