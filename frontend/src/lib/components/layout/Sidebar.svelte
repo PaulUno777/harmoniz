@@ -22,7 +22,7 @@
     <div class="w-8 h-8 bg-accent rounded-lg flex items-center justify-center shadow-lg shadow-accent/20">
       <MusicNotesIcon size={20} weight="bold" class="text-background" />
     </div>
-    <h1 class="text-xl font-bold tracking-tight">Harmonizr</h1>
+    <h1 class="text-xl font-bold tracking-tight">{$t('appName')}</h1>
   </div>
 
   <nav class="flex-1 px-4 space-y-2">

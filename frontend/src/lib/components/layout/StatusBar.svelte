@@ -1,5 +1,6 @@
 <script lang="ts">
   import { MusicNotesIcon, TrashIcon } from 'phosphor-svelte'
+  import { t } from '../../stores/i18n'
 
   interface Props {
     tracked: number
@@ -17,7 +18,7 @@
         <MusicNotesIcon size={12} class="text-accent shrink-0" />
         <span class="text-[9px] normal-case opacity-90">
           <span class="text-accent font-mono">{tracked}</span>
-          <span class="opacity-70 ml-1">tracked</span>
+          <span class="opacity-70 ml-1">{$t('statusTracked')}</span>
         </span>
       </div>
       <div class="w-px h-3 bg-border"></div>
@@ -25,15 +26,15 @@
         <TrashIcon size={12} class="text-text-muted shrink-0" />
         <span class="text-[9px] normal-case opacity-90">
           <span class="font-mono">{cleaned}</span>
-          <span class="opacity-70 ml-1">cleaned</span>
+          <span class="opacity-70 ml-1">{$t('statusCleaned')}</span>
         </span>
       </div>
     {:else}
-      <span class="opacity-50 text-[9px] normal-case">No library selected</span>
+      <span class="opacity-50 text-[9px] normal-case">{$t('noLibrarySelected')}</span>
     {/if}
   </div>
 
   <div class="flex items-center gap-3 shrink-0">
-    <span class="opacity-40 text-[9px]">Harmoniz v0.1.0</span>
+    <span class="opacity-40 text-[9px]">{$t('appName')} v0.1.0</span>
   </div>
 </footer>

@@ -8,6 +8,8 @@
   import EmptyState from "./lib/components/layout/EmptyState.svelte";
   import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
   import { theme } from "./lib/stores/theme";
+  import { t } from "./lib/stores/i18n";
+  import { get } from "svelte/store";
   import type { Track, TabId } from "./lib/types";
 
   let activeTab = $state<TabId>("library");
@@ -16,8 +18,6 @@
   let tracks = $state<Track[]>([]);
   let totalTrackCount = $state(0);
   let isLoadingTracks = $state(false);
-
-  const appTitle = "Harmoniz";
 
   // @ts-ignore
   import {
@@ -59,16 +59,14 @@
 
   function updateWindowTitle(path: string) {
     try {
-      WindowSetTitle(path ? `${appTitle} — ${path}` : appTitle);
+      const title = get(t)("appTitle");
+      WindowSetTitle(path ? `${title} — ${path}` : title);
     } catch (_) {}
   }
 
   $effect(() => {
-    if (!currentLibraryPath) {
-      try {
-        WindowSetTitle(appTitle);
-      } catch (_) {}
-    }
+    $t('appTitle');
+    updateWindowTitle(currentLibraryPath);
   });
 
   onMount(() => {

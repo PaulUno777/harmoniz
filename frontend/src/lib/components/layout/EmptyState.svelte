@@ -1,7 +1,6 @@
 <script lang="ts">
   import { MusicNotesIcon } from "phosphor-svelte";
-  import { get } from "svelte/store";
-  import { t as translateStore } from "../../stores/i18n";
+  import { t } from "../../stores/i18n";
 
   interface Props {
     onBrowse: () => void;
@@ -9,10 +8,6 @@
 
   let { onBrowse }: Props = $props();
   let isDragOver = $state(false);
-  let t = $state(get(translateStore));
-  $effect(() => {
-    t = get(translateStore);
-  });
 </script>
 
 <div class="h-full flex flex-col items-center justify-center p-12 text-center">
@@ -44,10 +39,10 @@
     </div>
     <div>
       <h3 class="text-xl font-bold font-display mb-2">
-        {t("emptyStateTitle")}
+        {$t('emptyStateTitle')}
       </h3>
       <p class="text-text-secondary text-sm max-w-xs mx-auto leading-relaxed">
-        {t("emptyStateSubtitle")}
+        {$t('emptyStateSubtitle')}
       </p>
     </div>
 
@@ -56,14 +51,14 @@
         onclick={onBrowse}
         class="px-8 py-2.5 bg-accent text-background font-bold rounded-xl hover:scale-105 transition-all shadow-lg shadow-accent/20 active:scale-95"
       >
-        {t("openFolder")}
+        {$t('openFolder')}
       </button>
     </div>
 
     <span
       class="text-[10px] uppercase tracking-widest font-bold text-text-muted opacity-60"
     >
-      {t("dropZone")}
+      {$t('dropZone')}
     </span>
   </div>
 </div>

@@ -49,7 +49,14 @@ const translations = {
     noTracksFound: 'No tracks found',
     tryScanningFolder: 'Try scanning a folder with audio files',
     unknownArtist: 'Unknown Artist',
-    unknownAlbum: 'Unknown Album'
+    unknownAlbum: 'Unknown Album',
+    statusTracked: 'tracked',
+    statusCleaned: 'cleaned',
+    noLibrarySelected: 'No library selected',
+    appTitle: 'Harmoniz',
+    appName: 'Harmoniz',
+    filter: 'Filter',
+    viewOptions: 'View Options'
   },
   fr: {
     library: 'Bibliothèque',
@@ -95,7 +102,14 @@ const translations = {
     noTracksFound: 'Aucun morceau trouvé',
     tryScanningFolder: 'Essayez d\'analyser un dossier contenant des fichiers audio',
     unknownArtist: 'Artiste inconnu',
-    unknownAlbum: 'Album inconnu'
+    unknownAlbum: 'Album inconnu',
+    statusTracked: 'suivis',
+    statusCleaned: 'nettoyés',
+    noLibrarySelected: 'Aucune bibliothèque sélectionnée',
+    appTitle: 'Harmoniz',
+    appName: 'Harmoniz',
+    filter: 'Filtrer',
+    viewOptions: 'Options d\'affichage'
   }
 };
 

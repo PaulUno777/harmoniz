@@ -1,8 +1,7 @@
 <script lang="ts">
   import { FileAudioIcon } from "phosphor-svelte";
   import { formatFileSize } from "../../utils/format";
-  import { t as translateStore } from "../../stores/i18n";
-  import { get } from 'svelte/store';
+  import { t } from "../../stores/i18n";
   import type { Track } from "../../types";
 
   interface Props {
@@ -20,17 +19,13 @@
     currentLibraryPath,
     onSelectTrack,
   }: Props = $props();
-  let t = $state(get(translateStore));
-  $effect(() => {
-    t = get(translateStore);
-  });
 </script>
 
 <div class="h-full min-w-0 overflow-y-auto overflow-x-hidden p-8 custom-scrollbar">
   {#if isLoadingTracks}
     <div class="flex items-center justify-center h-full min-w-0">
       <div class="text-center min-w-0 px-4 max-w-full">
-        <div class="text-text-secondary mb-2">{t('scanningLibrary')}</div>
+        <div class="text-text-secondary mb-2">{$t('scanningLibrary')}</div>
         <div class="text-[10px] text-text-muted truncate" title={currentLibraryPath}>
           {currentLibraryPath}
         </div>
@@ -39,9 +34,9 @@
   {:else if tracks.length === 0}
     <div class="flex items-center justify-center h-full min-w-0">
       <div class="text-center min-w-0 px-4">
-        <div class="text-text-secondary mb-2 truncate">{t('noTracksFound')}</div>
+        <div class="text-text-secondary mb-2 truncate">{$t('noTracksFound')}</div>
         <div class="text-[10px] text-text-muted truncate">
-          {t('tryScanningFolder')}
+          {$t('tryScanningFolder')}
         </div>
       </div>
     </div>
@@ -73,9 +68,9 @@
               {track.title}
             </div>
             <div class="text-xs text-text-secondary truncate mt-0.5">
-              {track.artist || t('unknownArtist')}
+              {track.artist || $t('unknownArtist')}
               <span class="mx-1.5 opacity-30">•</span>
-              {track.album || t('unknownAlbum')}
+              {track.album || $t('unknownAlbum')}
             </div>
           </div>
           <div

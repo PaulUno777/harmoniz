@@ -7,14 +7,13 @@
     TranslateIcon, 
     MusicNotesIcon 
   } from 'phosphor-svelte'
-  import { get } from 'svelte/store'
   import { t, locale, type Locale } from '../../stores/i18n'
   import { theme } from '../../stores/theme'
   import CustomSelect from '../ui/CustomSelect.svelte'
   import ThemePreviewButton from '../ui/ThemePreviewButton.svelte'
 
   let isCheckingUpdates = $state(false)
-  let updateStatus = $state<string | null>(null)
+  let updateStatusKey = $state<'latestVersion' | null>(null)
   
   const languages: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
@@ -23,13 +22,13 @@
 
   async function handleCheckUpdates() {
     isCheckingUpdates = true
-    updateStatus = null
+    updateStatusKey = null
     
     // Simulate API call
     await new Promise(resolve => setTimeout(resolve, 2000))
     
     isCheckingUpdates = false
-    updateStatus = get(t)('latestVersion')
+    updateStatusKey = 'latestVersion'
   }
 
   const themeDescription = $derived(() => {
@@ -148,9 +147,9 @@
           >
             {isCheckingUpdates ? $t('checking') : $t('checkForUpdates')}
           </button>
-          {#if updateStatus}
+          {#if updateStatusKey}
             <span class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest animate-pulse">
-              {updateStatus}
+              {$t(updateStatusKey)}
             </span>
           {/if}
         </div>
