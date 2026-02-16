@@ -36,7 +36,14 @@ const translations = {
     appLanguage: 'App Language',
     changeLanguage: 'Change the interface language.',
     about: 'About',
-    checkForUpdates: 'Check for Updates'
+    checkForUpdates: 'Check for Updates',
+    settingsDescription: 'Configure Harmonizr to your preferences.',
+    currentlyUsingDark: 'Currently using Dark mode.',
+    currentlyUsingLight: 'Currently using Light mode.',
+    matchingSystemPreference: 'Matching your operating system preference.',
+    latestVersion: 'You are on the latest version!',
+    checking: 'Checking...',
+    aboutDescription: 'A premium tool for music library organization.'
   },
   fr: {
     library: 'Bibliothèque',
@@ -69,7 +76,14 @@ const translations = {
     appLanguage: 'Langue de l\'application',
     changeLanguage: 'Changer la langue de l\'interface.',
     about: 'À propos',
-    checkForUpdates: 'Vérifier les mises à jour'
+    checkForUpdates: 'Vérifier les mises à jour',
+    settingsDescription: 'Configurez Harmonizr selon vos préférences.',
+    currentlyUsingDark: 'Mode sombre actuellement utilisé.',
+    currentlyUsingLight: 'Mode clair actuellement utilisé.',
+    matchingSystemPreference: 'Correspond à la préférence de votre système d\'exploitation.',
+    latestVersion: 'Vous utilisez la dernière version !',
+    checking: 'Vérification...',
+    aboutDescription: 'Un outil premium pour l\'organisation de bibliothèques musicales.'
   }
 };
 

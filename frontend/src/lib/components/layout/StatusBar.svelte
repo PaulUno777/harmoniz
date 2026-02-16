@@ -1,6 +1,6 @@
 <script lang="ts">
   import { t } from '../../stores/i18n'
-  import { WifiHighIcon, WifiSlashIcon, InfoIcon } from 'phosphor-svelte'
+  import { WifiHighIcon, WifiSlashIcon } from 'phosphor-svelte'
 
   interface Props {
     connected: boolean | null
@@ -30,10 +30,6 @@
   </div>
 
   <div class="flex items-center gap-3">
-    <div class="flex items-center gap-1.5 px-2 py-0.5 bg-white/5 rounded border border-white/10">
-      <InfoIcon size={12} />
-      <span>Svelte 5 Runes Mode</span>
-    </div>
     <div class="w-px h-3 bg-border"></div>
     <span class="opacity-40">Build 2026.02.16</span>
   </div>

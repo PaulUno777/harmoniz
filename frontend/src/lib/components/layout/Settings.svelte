@@ -7,9 +7,11 @@
     TranslateIcon, 
     MusicNotesIcon 
   } from 'phosphor-svelte'
+  import { get } from 'svelte/store'
   import { t, locale, type Locale } from '../../stores/i18n'
   import { theme } from '../../stores/theme'
   import CustomSelect from '../ui/CustomSelect.svelte'
+  import ThemePreviewButton from '../ui/ThemePreviewButton.svelte'
 
   let isCheckingUpdates = $state(false)
   let updateStatus = $state<string | null>(null)
@@ -27,14 +29,21 @@
     await new Promise(resolve => setTimeout(resolve, 2000))
     
     isCheckingUpdates = false
-    updateStatus = 'You are on the latest version!'
+    updateStatus = get(t)('latestVersion')
   }
+
+  const themeDescription = $derived(() => {
+    if ($theme === 'system') {
+      return $t('matchingSystemPreference')
+    }
+    return $theme === 'dark' ? $t('currentlyUsingDark') : $t('currentlyUsingLight')
+  })
 </script>
 
-<div class="flex-1 overflow-y-auto p-8 max-w-4xl mx-auto w-full custom-scrollbar">
+<div class="flex-1 p-8 max-w-4xl mx-auto w-full">
   <div class="mb-8">
     <h1 class="text-2xl font-bold mb-1 font-display">{$t('settings')}</h1>
-    <p class="text-text-secondary text-sm">Configure Harmonizr to your preferences.</p>
+    <p class="text-text-secondary text-sm">{$t('settingsDescription')}</p>
   </div>
 
   <div class="space-y-8 pb-12">
@@ -46,47 +55,47 @@
       </div>
 
       <div class="bg-surface rounded-2xl border border-border p-5 shadow-sm space-y-6">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-start justify-items-center max-w-[600px] mx-auto">
           <!-- Dark Preview -->
-          <button 
-            onclick={() => $theme = 'dark'}
-            class="flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all 
-                      {$theme === 'dark' ? 'border-accent bg-accent/5' : 'border-border opacity-50 hover:opacity-80 hover:border-text-muted'}">
-            <div class="w-full aspect-[4/3] bg-[#0f1115] rounded-lg border border-[#2c2e36] flex items-center justify-center shadow-inner">
-              <MoonIcon size={20} class="text-[#eaeaeb]" />
-            </div>
-            <span class="text-[9px] font-bold uppercase tracking-widest opacity-70">{$t('dark')}</span>
-          </button>
+          <ThemePreviewButton
+            value="dark"
+            selectedValue={$theme}
+            label={$t('dark')}
+            icon={MoonIcon}
+            previewBg="#0f1115"
+            previewBorder="#2c2e36"
+            previewIconClass="text-[#eaeaeb]"
+            onClick={() => $theme = 'dark'}
+          />
 
           <!-- Light Preview -->
-          <button 
-            onclick={() => $theme = 'light'}
-            class="flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all
-                      {$theme === 'light' ? 'border-accent bg-accent/5' : 'border-border opacity-50 hover:opacity-80 hover:border-text-muted'}">
-            <div class="w-full aspect-[4/3] bg-[#f8fafc] rounded-lg border border-[#e2e8f0] flex items-center justify-center shadow-inner">
-              <SunIcon size={20} class="text-[#0f172a]" />
-            </div>
-            <span class="text-[9px] font-bold uppercase tracking-widest opacity-70">{$t('light')}</span>
-          </button>
+          <ThemePreviewButton
+            value="light"
+            selectedValue={$theme}
+            label={$t('light')}
+            icon={SunIcon}
+            previewBg="#f8fafc"
+            previewBorder="#e2e8f0"
+            previewIconClass="text-[#0f172a]"
+            onClick={() => $theme = 'light'}
+          />
 
           <!-- System Preview -->
-          <button 
-            onclick={() => $theme = 'system'}
-            class="flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all
-                      {$theme === 'system' ? 'border-accent bg-accent/5' : 'border-border opacity-50 hover:opacity-80 hover:border-text-muted'}">
-            <div class="w-full aspect-[4/3] bg-gradient-to-br from-[#0f1115] to-[#f8fafc] rounded-lg border border-border flex items-center justify-center shadow-inner overflow-hidden relative">
-              <div class="absolute inset-0 flex">
-                <div class="flex-1 bg-[#0f1115]"></div>
-                <div class="flex-1 bg-[#f8fafc]"></div>
-              </div>
-              <MonitorIcon size={20} class="relative z-10 text-accent mix-blend-difference" />
-            </div>
-            <span class="text-[9px] font-bold uppercase tracking-widest opacity-70">{$t('system')}</span>
-          </button>
+          <ThemePreviewButton
+            value="system"
+            selectedValue={$theme}
+            label={$t('system')}
+            icon={MonitorIcon}
+            previewBg="linear-gradient(to bottom right, #0f1115, #f8fafc)"
+            previewBorder="var(--border)"
+            previewIconClass="text-accent mix-blend-difference relative z-10"
+            isSystem={true}
+            onClick={() => $theme = 'system'}
+          />
         </div>
         
         <p class="text-[10px] text-text-muted px-1 leading-relaxed">
-          {$theme === 'system' ? 'Matching your operating system preference.' : `Currently using ${$theme === 'dark' ? 'Dark' : 'Light'} mode.`}
+          {themeDescription()}
         </p>
       </div>
     </section>
@@ -127,7 +136,7 @@
           </div>
           <div>
             <div class="font-bold text-accent italic tracking-tight font-display text-md">Harmonizr v0.1.0-alpha</div>
-            <div class="text-[11px] text-text-secondary">A premium tool for music library organization.</div>
+            <div class="text-[11px] text-text-secondary">{$t('aboutDescription')}</div>
           </div>
         </div>
         
@@ -137,7 +146,7 @@
             disabled={isCheckingUpdates}
             class="px-5 py-2 bg-accent text-background font-bold text-xs rounded-lg hover:bg-accent-hover transition-all active:scale-[0.98] shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-wait"
           >
-            {isCheckingUpdates ? 'Checking...' : $t('checkForUpdates')}
+            {isCheckingUpdates ? $t('checking') : $t('checkForUpdates')}
           </button>
           {#if updateStatus}
             <span class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest animate-pulse">

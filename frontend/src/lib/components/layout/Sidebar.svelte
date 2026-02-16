@@ -17,7 +17,7 @@
   ])
 </script>
 
-<aside class="w-64 h-full bg-surface border-r border-border flex flex-col pt-8">
+<aside class="w-52 h-full bg-surface border-r border-border flex flex-col pt-8">
   <div class="px-6 mb-8 flex items-center gap-3">
     <div class="w-8 h-8 bg-accent rounded-lg flex items-center justify-center shadow-lg shadow-accent/20">
       <MusicNotesIcon size={20} weight="bold" class="text-background" />
