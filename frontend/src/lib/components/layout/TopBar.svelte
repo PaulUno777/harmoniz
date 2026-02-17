@@ -11,9 +11,13 @@
   interface Props {
     activeTab: TabId;
     onBrowse: () => void;
+    searchQuery: string;
+    onSearchChange: (query: string) => void;
+    onFilterToggle: () => void;
+    activeFilterCount: number;
   }
 
-  let { activeTab, onBrowse }: Props = $props();
+  let { activeTab, onBrowse, searchQuery, onSearchChange, onFilterToggle, activeFilterCount }: Props = $props();
 </script>
 
 <header
@@ -41,6 +45,8 @@
         />
         <input
           type="text"
+          value={searchQuery}
+          oninput={(e) => onSearchChange((e.target as HTMLInputElement).value)} 
           placeholder={$t('search')}
           class="w-full bg-surface border border-border rounded-full py-2 pl-10 pr-4 outline-none focus:ring-1 focus:ring-accent transition-all"
         />
@@ -50,10 +56,16 @@
 
   <div class="flex items-center gap-2">
     <button
-      class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors"
+      onclick={onFilterToggle}
+      class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors relative"
       title={$t('filter')}
     >
       <FunnelIcon size={20} />
+      {#if activeFilterCount > 0}
+        <span class="absolute -top-1 -right-1 bg-accent text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+          {activeFilterCount}
+        </span>
+      {/if}
     </button>
     <button
       class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors"

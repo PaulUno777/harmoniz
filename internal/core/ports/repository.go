@@ -36,9 +36,9 @@ type TrackRepository interface {
 	// GetTracks returns tracks by IDs.
 	GetTracks(ctx context.Context, ids []uint64) ([]domain.Track, error)
 
-	// ListTracks returns tracks for the library, optionally filtered by root path prefix.
-	// If root is empty, all non-deleted tracks are returned. total is the full count matching the filter.
-	ListTracks(ctx context.Context, root string, limit, offset int) ([]domain.Track, int, error)
+	// ListTracks returns tracks for the library, filtered by the provided criteria.
+	// If filter.Root is empty, all non-deleted tracks are returned. total is the full count matching the filter.
+	ListTracks(ctx context.Context, filter domain.TrackFilter) ([]domain.Track, int, error)
 
 	// LatestAddedAtForRoot returns the most recent added_at (Unix timestamp) among tracks under root.
 	// Returns 0 if no tracks. Used for staleness check before full re-sync.

@@ -49,6 +49,23 @@ type ListTracksResult struct {
 	Total  int     `json:"Total"`
 }
 
+// TrackFilter encapsulates all filter criteria for listing tracks.
+type TrackFilter struct {
+	Root string // Library root path
+
+	// Text search (searches across multiple fields: artist, album, title, filename)
+	SearchQuery string
+	// Range filters
+	YearMin *int
+	YearMax *int
+	SizeMin *int64
+	SizeMax *int64
+
+	// Pagination
+	Limit  int
+	Offset int
+}
+
 // NormalizeArtist removes accents, punctuation, and converts to lowercase
 // Example: "Guns N' Roses" -> "guns n roses"
 func NormalizeArtist(input string) string {

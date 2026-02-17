@@ -86,25 +86,59 @@ func (a *Adapter) GetAllPathsModTime() (map[string]int64, error) {
 	return cache, nil
 }
 
-// ListTracks returns tracks for the library, optionally filtered by root path prefix.
-func (a *Adapter) ListTracks(ctx context.Context, root string, limit, offset int) ([]domain.Track, int, error) {
-	baseCond := "WHERE is_deleted = 0"
+// ListTracks returns tracks for the library, filtered by the provided criteria.
+func (a *Adapter) ListTracks(ctx context.Context, filter domain.TrackFilter) ([]domain.Track, int, error) {
+	conditions := []string{"is_deleted = 0"}
 	args := []interface{}{}
-	if root != "" {
+
+	// Root path filter
+	if filter.Root != "" {
 		// Normalize root so LIKE matches paths stored by scanner (no trailing slash).
-		normalized := strings.TrimRight(filepath.Clean(root), "/\\")
-		baseCond += " AND (path = ? OR path LIKE ?)"
+		normalized := strings.TrimRight(filepath.Clean(filter.Root), "/\\")
+		conditions = append(conditions, "(path = ? OR path LIKE ?)")
 		args = append(args, normalized, normalized+"/%")
 	}
 
-	countQuery := "SELECT COUNT(*) FROM tracks " + baseCond 
+	// Search query (searches across artist, album, title, filename)
+	if filter.SearchQuery != "" {
+		searchPattern := "%" + strings.ToLower(filter.SearchQuery) + "%"
+		conditions = append(conditions,
+			"(LOWER(artist_raw) LIKE ? OR LOWER(album_raw) LIKE ? OR LOWER(title) LIKE ? OR LOWER(filename) LIKE ?)")
+		args = append(args, searchPattern, searchPattern, searchPattern, searchPattern)
+	}
+
+	// Year range filters
+	if filter.YearMin != nil {
+		conditions = append(conditions, "year >= ?")
+		args = append(args, *filter.YearMin)
+	}
+	if filter.YearMax != nil {
+		conditions = append(conditions, "year <= ?")
+		args = append(args, *filter.YearMax)
+	}
+
+	// Size range filters
+	if filter.SizeMin != nil {
+		conditions = append(conditions, "size >= ?")
+		args = append(args, *filter.SizeMin)
+	}
+	if filter.SizeMax != nil {
+		conditions = append(conditions, "size <= ?")
+		args = append(args, *filter.SizeMax)
+	}
+
+	whereClause := "WHERE " + strings.Join(conditions, " AND ")
+
+	// Count query
+	countQuery := "SELECT COUNT(*) FROM tracks " + whereClause
 	var total int
 	if err := a.Conn.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	sel := "SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks " + baseCond + " ORDER BY id LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
+	// Select query with ID-based ordering for consistent pagination
+	sel := "SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks " + whereClause + " ORDER BY id LIMIT ? OFFSET ?"
+	args = append(args, filter.Limit, filter.Offset)
 	rows, err := a.Conn.QueryContext(ctx, sel, args...)
 	if err != nil {
 		return nil, 0, err

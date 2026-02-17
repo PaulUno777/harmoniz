@@ -48,7 +48,7 @@
   let rowVirtualizer = $state<ReturnType<typeof createVirtualizer<HTMLDivElement, Element>> | null>(null);
 
   /**
-   * Create virtualizer when scrollContainer becomes available.
+   * Create virtualizer when scrollContainer becomes available
    * Only create once to avoid losing scroll position.
    */
   $effect(() => {

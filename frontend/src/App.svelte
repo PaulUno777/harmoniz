@@ -7,6 +7,7 @@
   import TopBar from "./lib/components/layout/TopBar.svelte";
   import EmptyState from "./lib/components/layout/EmptyState.svelte";
   import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
+  import FilterPanel, { type FilterState } from "./lib/components/layout/FilterPanel.svelte";
   import { theme } from "./lib/stores/theme";
   import { t } from "./lib/stores/i18n";
   import { get } from "svelte/store";
@@ -33,6 +34,16 @@
 
   let isLoadingTracks = $state(false);
   let isLoadingMore = $state(false);
+
+  // Search and Filter State
+  let searchQuery = $state("");
+  let filters = $state<FilterState>({
+    yearMin: 0,
+    yearMax: 0,
+    sizeMin: 0,
+    sizeMax: 0,
+  });
+  let isFilterPanelOpen = $state(false);
 
   // Pagination
   const PAGE_SIZE = 100;
@@ -123,14 +134,24 @@
    */
   async function loadInitialTracks() {
     if (!currentLibraryPath) {
-      // tracks = [];
-      // totalTrackCount = 0;
-      // updateWindowTitle("");
       return;
     }
 
     try {
-      const result = await ListTracks(currentLibraryPath, PAGE_SIZE, 0);
+      // Convert MB to bytes for size filters
+      const sizeMinBytes = filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0;
+      const sizeMaxBytes = filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0;
+
+      const result = await ListTracks(
+        currentLibraryPath,
+        searchQuery,
+        filters.yearMin,
+        filters.yearMax,
+        sizeMinBytes,
+        sizeMaxBytes,
+        PAGE_SIZE,
+        0
+      );
 
       tracks =
         result?.Tracks?.map((t: any) => ({
@@ -162,10 +183,19 @@
     isLoadingMore = true;
 
     try {
+      // Convert MB to bytes for size filters
+      const sizeMinBytes = filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0;
+      const sizeMaxBytes = filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0;
+
       const result = await ListTracks(
         currentLibraryPath,
+        searchQuery,
+        filters.yearMin,
+        filters.yearMax,
+        sizeMinBytes,
+        sizeMaxBytes,
         PAGE_SIZE,
-        currentOffset,
+        currentOffset
       );
 
       const newTracks =
@@ -186,6 +216,40 @@
     }
   }
 
+  // Debounced search
+  let searchDebounceTimer: number;
+  $effect(() => {
+    // Watch searchQuery changes
+    searchQuery;
+    
+    if (!currentLibraryPath) return;
+    
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      handleFilterChange();
+    }, 300);
+  });
+
+  async function handleFilterChange() {
+    currentOffset = 0;
+    tracks = [];
+    isLoadingTracks = true;
+    await loadInitialTracks();
+  }
+
+  function handleApplyFilters(newFilters: FilterState) {
+    filters = newFilters;
+    handleFilterChange();
+  }
+
+  // Count active filters
+  const activeFilterCount = $derived(
+    (filters.yearMin > 0 ? 1 : 0) +
+    (filters.yearMax > 0 ? 1 : 0) +
+    (filters.sizeMin > 0 ? 1 : 0) +
+    (filters.sizeMax > 0 ? 1 : 0)
+  );
+
   const hasMoreTracks = $derived(tracks.length < totalTrackCount);
 </script>
 
@@ -200,7 +264,14 @@
     class="flex-1 flex flex-col min-w-0 min-h-0 bg-background relative overflow-hidden"
   >
     <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
-      <TopBar {activeTab} onBrowse={handleBrowse} />
+      <TopBar 
+        {activeTab} 
+        onBrowse={handleBrowse} 
+        {searchQuery}
+        onSearchChange={(query) => searchQuery = query}
+        onFilterToggle={() => isFilterPanelOpen = !isFilterPanelOpen}
+        {activeFilterCount}
+      />
 
       <div
         class="flex-1 relative overflow-hidden"
@@ -238,4 +309,12 @@
   <aside class="w-80 shrink-0 h-full overflow-hidden flex flex-col">
     <ContextPanel bind:selectedTrack />
   </aside>
+
+  <!-- Filter Panel -->
+  <FilterPanel
+    isOpen={isFilterPanelOpen}
+    onClose={() => isFilterPanelOpen = false}
+    onApply={handleApplyFilters}
+    initialFilters={filters}
+  />
 </div>

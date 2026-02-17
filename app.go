@@ -49,15 +49,45 @@ func (a *App) OpenFolderDialog() (string, error) {
 	})
 }
 
-// ListTracks returns tracks for the library, filtered by root path only.
-// Scope: only tracks under root (that path and its subfolders) are returned; parent and unrelated paths are excluded.
+// ListTracks returns tracks for the library, filtered by the provided criteria.
+// Supports text search (across artist, album, title, filename) and range filters (year, file size).
 // Returns a single struct so Wails serializes it reliably to JS as { Tracks, Total }.
-func (a *App) ListTracks(root string, limit, offset int) (*domain.ListTracksResult, error) {
-	tracks, total, err := a.scanner.ListTracks(a.ctx, root, limit, offset)
+func (a *App) ListTracks(
+	root string,
+	searchQuery string,
+	yearMin int,
+	yearMax int,
+	sizeMin int64,
+	sizeMax int64,
+	limit int,
+	offset int,
+) (*domain.ListTracksResult, error) {
+	filter := domain.TrackFilter{
+		Root:        root,
+		SearchQuery: searchQuery,
+		Limit:       limit,
+		Offset:      offset,
+	}
+
+	// Set range filters only if provided (non-zero values)
+	if yearMin > 0 {
+		filter.YearMin = &yearMin
+	}
+	if yearMax > 0 {
+		filter.YearMax = &yearMax
+	}
+	if sizeMin > 0 {
+		filter.SizeMin = &sizeMin
+	}
+	if sizeMax > 0 {
+		filter.SizeMax = &sizeMax
+	}
+
+	tracks, total, err := a.scanner.ListTracks(a.ctx, filter)
 	if err != nil {
 		logger.Log.Error("ListTracks failed", "error", err)
 		return nil, err
 	}
-	logger.Log.Info("ListTracks returned", "tracks", len(tracks), "total", total)
+	logger.Log.Info("ListTracks returned", "tracks", len(tracks), "total", total, "filter", filter)
 	return &domain.ListTracksResult{Tracks: tracks, Total: total}, nil
 }

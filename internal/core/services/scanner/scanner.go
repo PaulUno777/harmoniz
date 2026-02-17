@@ -246,7 +246,7 @@ func (s *Service) writerLoop(ctx context.Context, in <-chan domain.Track) error 
 	return flush()
 }
 
-// ListTracks returns tracks for the library, optionally filtered by root path.
-func (s *Service) ListTracks(ctx context.Context, root string, limit, offset int) ([]domain.Track, int, error) {
-	return s.repo.ListTracks(ctx, root, limit, offset)
+// ListTracks returns tracks for the library, filtered by the provided criteria.
+func (s *Service) ListTracks(ctx context.Context, filter domain.TrackFilter) ([]domain.Track, int, error) {
+	return s.repo.ListTracks(ctx, filter)
 }
