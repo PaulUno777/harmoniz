@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, onMount } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import { t } from "../../stores/i18n";
   import type { Track } from "../../types";
   import { createVirtualizer } from "@tanstack/svelte-virtual";
@@ -48,17 +48,28 @@
   let rowVirtualizer = $state<ReturnType<typeof createVirtualizer<HTMLDivElement, Element>> | null>(null);
 
   /**
-   * Create virtualizer when scrollContainer becomes available
-   * Only create once to avoid losing scroll position.
+   * Create virtualizer when scrollContainer becomes available.
+   * 
+   * ALTERNATIVE APPROACH for Svelte 5: Use onMount + tick() to ensure
+   * the virtualizer initializes after the DOM is fully ready.
    */
-  $effect(() => {
-    if (scrollContainer && !rowVirtualizer) {
+  onMount(async () => {
+    // Wait for DOM to be fully ready
+    await tick();
+    
+    if (scrollContainer) {
       rowVirtualizer = createVirtualizer<HTMLDivElement, Element>({
         count: tracks.length,
         getScrollElement: () => scrollContainer,
         estimateSize: () => ROW_TOTAL_HEIGHT,
         overscan: 10,
       });
+      
+      // Force initial measurement after creation
+      await tick();
+      if ($rowVirtualizer) {
+        $rowVirtualizer.measure();
+      }
     }
   });
 
@@ -69,7 +80,8 @@
   $effect(() => {
     const count = tracks.length;
     if (rowVirtualizer && scrollContainer) {
-      // Update count using setOptions
+      // Update count using setOptions - this preserves scroll position
+      // Access the store value with $
       $rowVirtualizer?.setOptions({ count });
     }
   });
