@@ -1,9 +1,8 @@
 <script lang="ts">
-  import { onDestroy, onMount, tick } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { t } from "../../stores/i18n";
   import type { Track } from "../../types";
-  import { createVirtualizer } from "@tanstack/svelte-virtual";
-  import { LogDebug } from "../../../../wailsjs/runtime/runtime";
+  import VirtualList from "@humanspeak/svelte-virtual-list";
   import TrackItem from "./TrackItem.svelte";
 
   interface Props {
@@ -28,12 +27,6 @@
     onLoadMore,
   }: Props = $props();
 
-  let scrollContainer = $state<HTMLDivElement | null>(null);
-  const ROW_HEIGHT = 85; // Height of each row including content
-  const ROW_GAP = 8; // Gap between rows (matches gap-2 = 0.5rem = 8px)
-  const ROW_TOTAL_HEIGHT = ROW_HEIGHT + ROW_GAP; // Total height per row including gap
-  const PREFETCH_ROWS = 12;
-
   // Avoid `$t(...)` auto-subscription edge cases with runes + tooling:
   // keep a reactive translation function via explicit subscription.
   let tr = $state<(key: any) => string>((key) => String(key));
@@ -42,84 +35,44 @@
       tr = fn as any;
     });
     onDestroy(unsub);
-  });
 
-  // Create virtualizer once when scrollContainer is available
-  let rowVirtualizer = $state<ReturnType<typeof createVirtualizer<HTMLDivElement, Element>> | null>(null);
-
-  /**
-   * Create virtualizer when scrollContainer becomes available.
-   * 
-   * ALTERNATIVE APPROACH for Svelte 5: Use onMount + tick() to ensure
-   * the virtualizer initializes after the DOM is fully ready.
-   */
-  onMount(async () => {
-    // Wait for DOM to be fully ready
-    await tick();
-    
-    if (scrollContainer) {
-      rowVirtualizer = createVirtualizer<HTMLDivElement, Element>({
-        count: tracks.length,
-        getScrollElement: () => scrollContainer,
-        estimateSize: () => ROW_TOTAL_HEIGHT,
-        overscan: 10,
-      });
-      
-      // Force initial measurement after creation
-      await tick();
-      if ($rowVirtualizer) {
-        $rowVirtualizer.measure();
+    // Enable debug mode with Ctrl+Shift+D (or Cmd+Shift+D on Mac)
+    const handleKeyPress = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+        e.preventDefault();
+        debugMode = !debugMode;
+        console.log(`Debug mode ${debugMode ? 'enabled' : 'disabled'}`);
       }
-    }
+    };
+    window.addEventListener('keydown', handleKeyPress);
+    onDestroy(() => window.removeEventListener('keydown', handleKeyPress));
   });
 
-  /**
-   * Update virtualizer count when tracks change.
-   * Use setOptions to update without recreating the virtualizer.
-   */
-  $effect(() => {
-    const count = tracks.length;
-    if (rowVirtualizer && scrollContainer) {
-      // Update count using setOptions - this preserves scroll position
-      // Access the store value with $
-      $rowVirtualizer?.setOptions({ count });
-    }
-  });
+  // Estimated item height (matches ROW_HEIGHT from previous implementation)
+  const ESTIMATED_ITEM_HEIGHT = 85;
 
-  // Create derived state for virtual items to ensure reactivity
-  // Access the store value with $ to get the virtualizer instance
-  let virtualItems = $derived(rowVirtualizer ? ($rowVirtualizer?.getVirtualItems() ?? []) : []);
+  // Debug mode - set to true to enable virtualization debugging
+  // In production, you can toggle this via environment variable or settings
+  let debugMode = $state(false);
 
-  /**
-   * Trigger backend pagination when
-   * user scrolls near the end of loaded tracks.
-   */
-  $effect(() => {
-    if (!rowVirtualizer || virtualItems.length === 0) return;
-    
-    const lastItem = virtualItems[virtualItems.length - 1];
-
-    if (!lastItem) return;
-
-    if (
-      hasMoreTracks &&
-      !isLoadingMore &&
-      lastItem.index >= Math.max(0, tracks.length - 1 - PREFETCH_ROWS)
-    ) {
-      onLoadMore();
-    }
-  });
+  // Debug function to log virtualization info
+  function handleDebugInfo(info: any) {
+    console.log("🔍 Virtual List Debug Info:", {
+      totalItems: tracks.length,
+      visibleStart: info.visibleStart,
+      visibleEnd: info.visibleEnd,
+      renderedItems: info.visibleEnd - info.visibleStart + 1,
+      bufferSize: 10,
+      viewportHeight: info.viewportHeight,
+      totalHeight: info.totalHeight,
+    });
+  }
 </script>
 
-<!-- Scroll Container -->
-<!-- Added onscroll handler and bind:this -->
-<div
-  bind:this={scrollContainer}
-  class="h-full min-w-0 overflow-y-auto overflow-x-hidden p-8 custom-scrollbar relative"
->
+<div class="h-full min-w-0 overflow-hidden flex flex-col">
   {#if isLoadingTracks}
     <!-- Initial Loading State -->
-    <div class="flex items-center justify-center h-full min-w-0">
+    <div class="flex items-center justify-center h-full min-w-0 p-8">
       <div class="text-center min-w-0 px-4 max-w-full">
         <div class="text-text-secondary mb-2">
           {tr("scanningLibrary")}
@@ -134,7 +87,7 @@
     </div>
   {:else if tracks.length === 0}
     <!-- Empty State -->
-    <div class="flex items-center justify-center h-full min-w-0">
+    <div class="flex items-center justify-center h-full min-w-0 p-8">
       <div class="text-center min-w-0 px-4">
         <div class="text-text-secondary mb-2 truncate">
           {tr("noTracksFound")}
@@ -145,52 +98,49 @@
       </div>
     </div>
   {:else if tracks.length > 0}
-    {LogDebug(`tracks.length: ${tracks.length}`)}
-    <!-- Virtual List Container (use virtualizer if scrollContainer is ready, else fallback) -->
-    {#if scrollContainer && rowVirtualizer}
-      {LogDebug(`virtualItems.length: ${virtualItems.length}`)}
-      <div
-        class="w-full max-w-5xl mx-auto relative"
-        style="height: {$rowVirtualizer?.getTotalSize() ?? 0}px"
-      >
-        {#each virtualItems as virtualRow}
-          {#if tracks[virtualRow.index] !== undefined}
-            <div
-              style={`position:absolute;top:0;left:0;width:100%;height:${ROW_HEIGHT}px;transform:translateY(${virtualRow.start}px);`}
-            >
-              <TrackItem
-                track={tracks[virtualRow.index]}
-                isSelected={selectedTrack?.path === tracks[virtualRow.index].path}
-                onSelect={onSelectTrack}
-              />
-            </div>
-          {/if}
-        {/each}
-      </div>
+    <!-- Virtual List Container -->
+    <VirtualList
+      items={tracks}
+      defaultEstimatedItemHeight={ESTIMATED_ITEM_HEIGHT}
+      bufferSize={10}
+      onLoadMore={hasMoreTracks && !isLoadingMore ? onLoadMore : undefined}
+      loadMoreThreshold={12}
+      hasMore={hasMoreTracks}
+      debug={debugMode}
+      debugFunction={debugMode ? handleDebugInfo : undefined}
+      containerClass="h-full flex-1 min-h-0 overflow-x-hidden"
+      viewportClass="custom-scrollbar overflow-y-auto overflow-x-hidden h-full w-full"
+      contentClass="max-w-5xl mx-auto p-8 overflow-x-hidden"
+      itemsClass="grid gap-2"
+    >
+      {#snippet renderItem(track)}
+        <TrackItem
+          track={track}
+          isSelected={selectedTrack?.path === track.path}
+          onSelect={onSelectTrack}
+        />
+      {/snippet}
+    </VirtualList>
 
-      {#if isLoadingMore}
-        <div class="max-w-5xl mx-auto mt-6 text-xs text-text-muted opacity-80">
-          Loading more…
-        </div>
-      {/if}
-    {:else}
-      {LogDebug(`fallback: ${tracks.length}`)}
-      <!-- Fallback: render normally until scrollContainer is ready -->
-      <div class="grid gap-2 max-w-5xl mx-auto min-w-0">
-        {#each tracks as track}
-          <TrackItem
-            {track}
-            isSelected={selectedTrack?.path === track.path}
-            onSelect={onSelectTrack}
-          />
-        {/each}
+    {#if isLoadingMore}
+      <div class="max-w-5xl mx-auto px-8 py-4 text-xs text-text-muted opacity-80 shrink-0">
+        Loading more…
       </div>
+    {/if}
 
-      {#if isLoadingMore}
-        <div class="max-w-5xl mx-auto mt-6 text-xs text-text-muted opacity-80">
-          Loading more…
-        </div>
-      {/if}
+    <!-- Debug Info Panel (only visible when debugMode is true) -->
+    {#if debugMode}
+      <div class="fixed bottom-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg font-mono z-50 max-w-xs">
+        <div class="font-bold mb-2">🔍 Virtual List Debug</div>
+        <div>Total Items: {tracks.length}</div>
+        <div>Check console for details</div>
+        <button
+          onclick={() => debugMode = false}
+          class="mt-2 text-xs underline text-blue-300"
+        >
+          Hide Debug
+        </button>
+      </div>
     {/if}
   {/if}
 </div>
