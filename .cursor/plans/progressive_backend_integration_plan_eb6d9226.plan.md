@@ -22,10 +22,10 @@ todos:
     status: pending
   - id: phase3-list-tracks
     content: "Phase 3: Display track list - ListTracks + basic UI done; add infinite scroll + virtual list for optimization"
-    status: in_progress
+    status: completed
   - id: phase3-test
     content: "Phase 3 Test: Run through all validation criteria - virtual list, infinite scroll, current path display, performance"
-    status: pending
+    status: completed
   - id: phase3-approval
     content: "Phase 3 Approval: Request user approval before proceeding to Phase 4"
     status: pending
