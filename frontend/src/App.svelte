@@ -12,13 +12,6 @@
   import { get } from "svelte/store";
   import type { Track, TabId } from "./lib/types";
 
-  let activeTab = $state<TabId>("library");
-  let selectedTrack = $state<Track | null>(null);
-  let currentLibraryPath = $state("");
-  let tracks = $state<Track[]>([]);
-  let totalTrackCount = $state(0);
-  let isLoadingTracks = $state(false);
-
   // @ts-ignore
   import {
     OnFileDrop,
@@ -32,13 +25,25 @@
     ListTracks,
   } from "../wailsjs/go/main/App.js";
 
+  let activeTab = $state<TabId>("library");
+  let selectedTrack = $state<Track | null>(null);
+  let currentLibraryPath = $state("");
+  let tracks = $state<Track[]>([]);
+  let totalTrackCount = $state(0);
+
+  let isLoadingTracks = $state(false);
+  let isLoadingMore = $state(false);
+
+  // Pagination
+  const PAGE_SIZE = 100;
+  let currentOffset = $state(0);
+
   function parentDir(p: string): string {
     const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
     return i <= 0 ? p : p.slice(0, i);
   }
 
   function applyDroppedPaths(paths: string[]) {
-    console.log("applyDroppedPaths called with:", paths);
     if (!paths?.length) {
       console.log("No paths provided");
       return;
@@ -60,25 +65,21 @@
   function updateWindowTitle(path: string) {
     try {
       const title = get(t)("appTitle");
-      WindowSetTitle(path ? `${title} — ${path}` : title);
+      WindowSetTitle(path ? `${title}  —  ${path}` : title);
     } catch (_) {}
   }
 
   $effect(() => {
-    $t('appTitle');
+    $t("appTitle");
     updateWindowTitle(currentLibraryPath);
   });
 
   onMount(() => {
     theme.init();
+
     OnFileDrop((_x: number, _y: number, paths: string[]) => {
-      console.log("OnFileDrop callback triggered with paths:", paths);
       applyDroppedPaths(paths);
     }, true);
-
-    if (currentLibraryPath) {
-      loadTracks();
-    }
   });
 
   onDestroy(() => {
@@ -101,45 +102,91 @@
 
   async function handleScan(rootPath: string) {
     try {
-      console.log("Starting scan for:", rootPath);
       isLoadingTracks = true;
       await ScanLibrary(rootPath);
-      console.log("Scan completed");
-      await loadTracks();
+
+      // Reset pagination state
+      currentOffset = 0;
+      tracks = [];
+      selectedTrack = null;
+
+      // Load initial tracks
+      await loadInitialTracks();
     } catch (error) {
       console.error("Scan failed:", error);
       isLoadingTracks = false;
     }
   }
-
-  async function loadTracks() {
+  /**
+   * Loads the first page of tracks.
+   * Resets pagination state.
+   */
+  async function loadInitialTracks() {
     if (!currentLibraryPath) {
-      tracks = [];
-      totalTrackCount = 0;
-      updateWindowTitle("");
+      // tracks = [];
+      // totalTrackCount = 0;
+      // updateWindowTitle("");
       return;
     }
-    isLoadingTracks = true;
+
     try {
-      const result = await ListTracks(currentLibraryPath, 100, 0);
-      if (result && result.Tracks) {
-        tracks = result.Tracks.map((t) => ({
+      const result = await ListTracks(currentLibraryPath, PAGE_SIZE, 0);
+
+      tracks =
+        result?.Tracks?.map((t: any) => ({
           ...t,
           artist: t.artist_raw || "",
           album: t.album_raw || "",
-        }));
-        totalTrackCount = result.Total ?? 0;
-        console.log("Loaded tracks:", tracks.length, "total:", result.Total);
-      }
-      updateWindowTitle(currentLibraryPath);
+        })) ?? [];
+
+      totalTrackCount = result?.Total ?? 0;
+      currentOffset = tracks.length;
+
+      console.log("Initial load:", tracks.length, "/", totalTrackCount);
     } catch (error) {
-      console.error("Failed to load tracks:", error);
+      console.error("Initial load failed:", error);
       tracks = [];
       totalTrackCount = 0;
     } finally {
       isLoadingTracks = false;
     }
   }
+  /**
+   * Loads additional tracks when virtualization
+   * detects that user scrolls near the end.
+   */
+  async function loadMoreTracks() {
+    if (isLoadingMore) return;
+    if (tracks.length >= totalTrackCount) return;
+
+    isLoadingMore = true;
+
+    try {
+      const result = await ListTracks(
+        currentLibraryPath,
+        PAGE_SIZE,
+        currentOffset,
+      );
+
+      const newTracks =
+        result?.Tracks?.map((t: any) => ({
+          ...t,
+          artist: t.artist_raw || "",
+          album: t.album_raw || "",
+        })) ?? [];
+
+      tracks = [...tracks, ...newTracks];
+      currentOffset += newTracks.length;
+
+      console.log("Loaded more:", tracks.length, "/", totalTrackCount);
+    } catch (error) {
+      console.error("Load more failed:", error);
+    } finally {
+      isLoadingMore = false;
+    }
+  }
+
+  const hasMoreTracks = $derived(tracks.length < totalTrackCount);
 </script>
 
 <div
@@ -149,7 +196,9 @@
 >
   <Sidebar bind:activeTab />
 
-  <div class="flex-1 flex flex-col min-w-0 min-h-0 bg-background relative overflow-hidden">
+  <div
+    class="flex-1 flex flex-col min-w-0 min-h-0 bg-background relative overflow-hidden"
+  >
     <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
       <TopBar {activeTab} onBrowse={handleBrowse} />
 
@@ -168,7 +217,10 @@
             {selectedTrack}
             {isLoadingTracks}
             {currentLibraryPath}
+            {hasMoreTracks}
+            {isLoadingMore}
             onSelectTrack={(track) => (selectedTrack = track)}
+            onLoadMore={loadMoreTracks}
           />
         {/if}
       </div>

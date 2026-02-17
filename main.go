@@ -62,7 +62,7 @@ func main() {
 		Title:     "Harmoniz",
 		Width:     1366,
 		Height:    768,
-		MinWidth:  1366,
+
 		MinHeight: 768,
 		AssetServer: &assetserver.Options{
 			Assets: assets,

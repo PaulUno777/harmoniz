@@ -97,13 +97,13 @@ func (a *Adapter) ListTracks(ctx context.Context, root string, limit, offset int
 		args = append(args, normalized, normalized+"/%")
 	}
 
-	countQuery := "SELECT COUNT(*) FROM tracks " + baseCond
+	countQuery := "SELECT COUNT(*) FROM tracks " + baseCond 
 	var total int
 	if err := a.Conn.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, err
 	}
 
-	sel := "SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks " + baseCond + " ORDER BY path LIMIT ? OFFSET ?"
+	sel := "SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks " + baseCond + " ORDER BY id LIMIT ? OFFSET ?"
 	args = append(args, limit, offset)
 	rows, err := a.Conn.QueryContext(ctx, sel, args...)
 	if err != nil {
