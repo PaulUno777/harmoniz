@@ -111,14 +111,16 @@
       containerClass="h-full flex-1 min-h-0 overflow-x-hidden"
       viewportClass="custom-scrollbar overflow-y-auto overflow-x-hidden h-full w-full"
       contentClass="max-w-5xl mx-auto p-8 overflow-x-hidden"
-      itemsClass="grid gap-2"
+      itemsClass="grid grid-cols-[minmax(0,1fr)] gap-2"
     >
       {#snippet renderItem(track)}
-        <TrackItem
-          track={track}
-          isSelected={selectedTrack?.path === track.path}
-          onSelect={onSelectTrack}
-        />
+        <div class="min-w-0 overflow-hidden">
+          <TrackItem
+            track={track}
+            isSelected={selectedTrack?.path === track.path}
+            onSelect={onSelectTrack}
+          />
+        </div>
       {/snippet}
     </VirtualList>
 

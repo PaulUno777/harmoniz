@@ -158,9 +158,13 @@ The backup follows **Hexagonal Architecture**:
 - Tracks inserted into database
 - Query database: `SELECT COUNT(*) FROM tracks WHERE is_deleted = 0;` returns > 0
 - Sample track has correct metadata:
-  ```sql
+
+```sql
   SELECT path, title, artist_raw, size FROM tracks LIMIT 1;
-  ```
+
+
+```
+
 - `hash_partial` populated for scanned files
 - `mod_time` matches file system modification time
 

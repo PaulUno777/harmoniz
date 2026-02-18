@@ -43,12 +43,12 @@
   </div>
   <div class="flex-1 min-w-0 overflow-hidden">
     <div
-      class="font-bold text-text-primary truncate group-hover:text-accent transition-colors"
+      class="font-bold text-text-primary truncate break-all group-hover:text-accent transition-colors"
       title={track.title}
     >
       {track.title}
     </div>
-    <div class="text-xs text-text-secondary truncate mt-0.5">
+    <div class="text-xs text-text-secondary truncate break-all mt-0.5">
       {track.artist || tr("unknownArtist")}
       <span class="mx-1.5 opacity-30">•</span>
       {track.album || tr("unknownAlbum")}
