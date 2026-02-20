@@ -4,6 +4,7 @@
   import type { Track } from "../../types";
   import VirtualList from "@humanspeak/svelte-virtual-list";
   import TrackItem from "./TrackItem.svelte";
+  import { playbackStore } from "../../stores/playback";
 
   interface Props {
     tracks: Track[];
@@ -38,14 +39,14 @@
 
     // Enable debug mode with Ctrl+Shift+D (or Cmd+Shift+D on Mac)
     const handleKeyPress = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'D') {
+      if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "D") {
         e.preventDefault();
         debugMode = !debugMode;
-        console.log(`Debug mode ${debugMode ? 'enabled' : 'disabled'}`);
+        console.log(`Debug mode ${debugMode ? "enabled" : "disabled"}`);
       }
     };
-    window.addEventListener('keydown', handleKeyPress);
-    onDestroy(() => window.removeEventListener('keydown', handleKeyPress));
+    window.addEventListener("keydown", handleKeyPress);
+    onDestroy(() => window.removeEventListener("keydown", handleKeyPress));
   });
 
   // Estimated item height (matches ROW_HEIGHT from previous implementation)
@@ -66,6 +67,11 @@
       viewportHeight: info.viewportHeight,
       totalHeight: info.totalHeight,
     });
+  }
+
+  function handleTrackSelect(track: Track) {
+    onSelectTrack(track);
+    playbackStore.play(track, tracks);
   }
 </script>
 
@@ -116,28 +122,32 @@
       {#snippet renderItem(track)}
         <div class="min-w-0 overflow-hidden">
           <TrackItem
-            track={track}
+            {track}
             isSelected={selectedTrack?.path === track.path}
-            onSelect={onSelectTrack}
+            onSelect={handleTrackSelect}
           />
         </div>
       {/snippet}
     </VirtualList>
 
     {#if isLoadingMore}
-      <div class="max-w-5xl mx-auto px-8 py-4 text-xs text-text-muted opacity-80 shrink-0">
+      <div
+        class="max-w-5xl mx-auto px-8 py-4 text-xs text-text-muted opacity-80 shrink-0"
+      >
         Loading more…
       </div>
     {/if}
 
     <!-- Debug Info Panel (only visible when debugMode is true) -->
     {#if debugMode}
-      <div class="fixed bottom-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg font-mono z-50 max-w-xs">
+      <div
+        class="fixed bottom-4 right-4 bg-black/80 text-white text-xs p-3 rounded-lg font-mono z-50 max-w-xs"
+      >
         <div class="font-bold mb-2">🔍 Virtual List Debug</div>
         <div>Total Items: {tracks.length}</div>
         <div>Check console for details</div>
         <button
-          onclick={() => debugMode = false}
+          onclick={() => (debugMode = false)}
           class="mt-2 text-xs underline text-blue-300"
         >
           Hide Debug

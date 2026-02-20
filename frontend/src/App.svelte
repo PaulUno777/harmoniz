@@ -8,6 +8,7 @@
   import EmptyState from "./lib/components/layout/EmptyState.svelte";
   import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
   import FilterPanel, { type FilterState } from "./lib/components/layout/FilterPanel.svelte";
+  import FloatingPlayer from "./lib/components/layout/FloatingPlayer.svelte";
   import { theme } from "./lib/stores/theme";
   import { t } from "./lib/stores/i18n";
   import { get } from "svelte/store";
@@ -46,7 +47,7 @@
   let isFilterPanelOpen = $state(false);
 
   // Pagination
-  const PAGE_SIZE = 100;
+  const PAGE_SIZE = 200;
   let currentOffset = $state(0);
 
   function parentDir(p: string): string {
@@ -295,6 +296,8 @@
           />
         {/if}
       </div>
+
+      <FloatingPlayer {activeTab} />
     </main>
 
     <footer class="shrink-0">

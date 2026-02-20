@@ -282,21 +282,44 @@ The backup follows **Hexagonal Architecture**:
 
 ---
 
-### Phase 4: Analysis Features (Future)
+### Phase 4: Analysis Features
 
 **Goal**: Add artist clustering and duplicate detection
 
-**Files to create/copy:**
+**Purpose**: Help users identify and resolve data quality issues:
 
-- `internal/core/services/analysis/clustering.go`
-- `internal/core/services/analysis/deduplication.go`
-- `internal/core/domain/suggestion.go`
-- `internal/core/jobs/manager.go` - Job management for long-running tasks
+- **Artist Clustering**: Detect similar artist names (e.g., "Guns N' Roses" vs "guns n roses") using Jaro-Winkler fuzzy matching
+- **Duplicate Detection**: Find exact duplicate files using multi-stage funnel (size → partial hash → full hash)
 
-**Changes to existing:**
+**Files to create:**
 
-- `internal/adapters/ui/app.go` - Add analysis methods
-- Frontend components for analysis results
+- `internal/core/domain/suggestion.go` - ArtistSuggestion domain model
+- `internal/core/services/analysis/clustering.go` - Clustering service with Jaro-Winkler algorithm
+- `internal/core/services/analysis/deduplication.go` - Deduplication service with multi-stage funnel
+
+**Files to modify:**
+
+- `go.mod` - Add `github.com/xrash/smetrics` dependency (Jaro-Winkler)
+- `internal/adapters/db/track_repository.go` - Implement `GetDuplicateCandidates()` and `StreamUniqueArtists()`
+- `app.go` - Wire analysis services and expose `AnalyzeArtists()` and `DetectDuplicates()` methods
+- `main.go` - Pass repository to `NewApp()`
+
+**Algorithm Details:**
+
+**Clustering**:
+
+1. Bucket artists by first character (normalized)
+2. Compare pairs within buckets using Jaro-Winkler distance
+3. Threshold: score > 0.9 suggests similarity
+4. Length filter: skip if length difference > 3
+
+**Deduplication**:
+
+1. Stage 1 (SQL): Group by file size (fast filtering)
+2. Stage 2 (RAM): Group by partial hash (already computed)
+3. Stage 3 (Disk): Compute full hash only for candidates
+
+**Reference**: See `PHASE4_PLAN.md` for detailed implementation plan and validation criteria.
 
 ---
 
@@ -343,3 +366,4 @@ require (
 - UI updates correctly with real data
 - No console errors
 - Performance acceptable (< 1s for typical operations)
+

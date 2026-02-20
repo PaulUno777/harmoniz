@@ -59,9 +59,9 @@ func main() {
 
 	// Create application with options
 	err = wails.Run(&options.App{
-		Title:     "Harmoniz",
-		Width:     1366,
-		Height:    768,
+		Title:  "Harmoniz",
+		Width:  1366,
+		Height: 768,
 
 		MinHeight: 768,
 		AssetServer: &assetserver.Options{
@@ -73,7 +73,7 @@ func main() {
 			app,
 		},
 		DragAndDrop: &options.DragAndDrop{
-			EnableFileDrop:   true,
+			EnableFileDrop:     true,
 			DisableWebViewDrop: false,
 		},
 	})
