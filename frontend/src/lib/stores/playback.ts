@@ -81,7 +81,9 @@ function createPlaybackStore() {
       }));
     }
 
-    audio.src = `file://${track.path}`;
+    // Stream via Go backend (supports Range for seeking)
+    const streamUrl = `/stream?path=${encodeURIComponent(track.path)}`;
+    audio.src = streamUrl;
     audio.load();
     audio.play().catch((error) => {
       console.error("Failed to play audio:", error);

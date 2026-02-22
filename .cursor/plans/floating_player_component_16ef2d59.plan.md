@@ -78,19 +78,24 @@ Create a new Svelte store to manage playback state:
 **Components:**
 
 1. **Track Info Section (Left)**
-  - Track title (truncated)
-  - Artist name (truncated)
-  - Small album art placeholder or icon
+
+- Track title (truncated)
+- Artist name (truncated)
+- Small album art placeholder or icon
+
 2. **Playback Controls (Center)**
-  - Previous track button
-  - Play/Pause button (larger, prominent)
-  - Next track button
-  - Progress bar (seekable)
-  - Time display: `currentTime / totalTime` and `-timeLeft`
+
+- Previous track button
+- Play/Pause button (larger, prominent)
+- Next track button
+- Progress bar (seekable)
+- Time display: `currentTime / totalTime` and `-timeLeft`
+
 3. **Volume Control (Right)**
-  - Volume icon (with mute state)
-  - Volume slider (horizontal)
-  - Click icon to toggle mute
+
+- Volume icon (with mute state)
+- Volume slider (horizontal)
+- Click icon to toggle mute
 
 **Styling:**
 
@@ -174,4 +179,3 @@ frontend/src/lib/
 - Use Svelte 5 runes (`$state`, `$derived`) for reactivity
 - Ensure audio element is properly cleaned up on component destroy
 - Handle edge cases (no duration, loading state, etc.)
-
