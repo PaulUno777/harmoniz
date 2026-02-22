@@ -12,51 +12,97 @@ interface PlaybackState {
   isMuted: boolean;
 }
 
+const initialState: PlaybackState = {
+  currentTrack: null,
+  isPlaying: false,
+  currentTime: 0,
+  duration: 0,
+  volume: 1,
+  playlist: [],
+  currentIndex: -1,
+  isMuted: false,
+};
+
 function createPlaybackStore() {
-  const { subscribe, set, update } = writable<PlaybackState>({
-    currentTrack: null,
-    isPlaying: false,
-    currentTime: 0,
-    duration: 0,
-    volume: 1,
-    playlist: [],
-    currentIndex: -1,
-    isMuted: false,
-  });
+  const { subscribe, set: origSet, update: origUpdate } =
+    writable<PlaybackState>({ ...initialState });
+
+  let currentState: PlaybackState = { ...initialState };
+
+  function set(value: PlaybackState) {
+    currentState = value;
+    origSet(value);
+  }
+
+  function update(fn: (state: PlaybackState) => PlaybackState) {
+    origUpdate((state) => {
+      const next = fn(state);
+      currentState = next;
+      return next;
+    });
+  }
+
+  function getState(): PlaybackState {
+    return currentState;
+  }
 
   let audioElement: HTMLAudioElement | null = null;
+  let abortController: AbortController | null = null;
 
   function initAudio() {
     if (audioElement) return audioElement;
 
+    abortController = new AbortController();
+    const signal = abortController.signal;
+
     audioElement = new Audio();
     audioElement.volume = 1;
 
-    audioElement.addEventListener("timeupdate", () => {
-      update((state) => ({
-        ...state,
-        currentTime: audioElement?.currentTime || 0,
-      }));
-    });
+    audioElement.addEventListener(
+      "timeupdate",
+      () => {
+        update((state) => ({
+          ...state,
+          currentTime: audioElement?.currentTime ?? 0,
+        }));
+      },
+      { signal },
+    );
 
-    audioElement.addEventListener("loadedmetadata", () => {
-      update((state) => ({
-        ...state,
-        duration: audioElement?.duration || 0,
-      }));
-    });
+    audioElement.addEventListener(
+      "loadedmetadata",
+      () => {
+        update((state) => ({
+          ...state,
+          duration: audioElement?.duration ?? 0,
+        }));
+      },
+      { signal },
+    );
 
-    audioElement.addEventListener("ended", () => {
-      next();
-    });
+    audioElement.addEventListener(
+      "ended",
+      () => {
+        next();
+      },
+      { signal },
+    );
 
-    audioElement.addEventListener("play", () => {
-      update((state) => ({ ...state, isPlaying: true }));
-    });
+    audioElement.addEventListener(
+      "play",
+      () => {
+        update((state) => ({ ...state, isPlaying: true }));
+      },
+      { signal },
+    );
 
-    audioElement.addEventListener("pause", () => {
-      update((state) => ({ ...state, isPlaying: false }));
-    });
+    audioElement.addEventListener(
+      "pause",
+      () => {
+        update((state) => ({ ...state, isPlaying: false }));
+      },
+      { signal },
+    );
 
     return audioElement;
   }
@@ -68,7 +114,7 @@ function createPlaybackStore() {
       const index = playlist.findIndex((t) => t.path === track.path);
       update((state) => ({
         ...state,
-        playlist: playlist,
+        playlist,
         currentIndex: index >= 0 ? index : 0,
         currentTrack: track,
       }));
@@ -81,7 +127,6 @@ function createPlaybackStore() {
       }));
     }
 
-    // Stream via Go backend (supports Range for seeking)
     const streamUrl = `/stream?path=${encodeURIComponent(track.path)}`;
     audio.src = streamUrl;
     audio.load();
@@ -105,14 +150,12 @@ function createPlaybackStore() {
   }
 
   function toggle() {
-    update((state) => {
-      if (state.isPlaying) {
-        pause();
-      } else {
-        resume();
-      }
-      return state;
-    });
+    const state = getState();
+    if (state.isPlaying) {
+      pause();
+    } else {
+      resume();
+    }
   }
 
   function seek(time: number) {
@@ -137,51 +180,51 @@ function createPlaybackStore() {
   }
 
   function toggleMute() {
-    update((state) => {
-      if (audioElement) {
-        if (state.isMuted) {
-          audioElement.volume = state.volume || 0.5;
-          return { ...state, isMuted: false };
-        } else {
-          audioElement.volume = 0;
-          return { ...state, isMuted: true };
-        }
-      }
-      return state;
-    });
+    const state = getState();
+    if (!audioElement) return;
+    if (state.isMuted) {
+      audioElement.volume = state.volume || 0.5;
+      update((s) => ({ ...s, isMuted: false }));
+    } else {
+      audioElement.volume = 0;
+      update((s) => ({ ...s, isMuted: true }));
+    }
   }
 
+  const RESTART_THRESHOLD_SEC = 3;
+
   function next() {
-    update((state) => {
-      if (state.playlist.length === 0 || state.currentIndex < 0) return state;
+    const state = getState();
+    if (state.playlist.length === 0 || state.currentIndex < 0) return;
 
-      const nextIndex = (state.currentIndex + 1) % state.playlist.length;
-      const nextTrack = state.playlist[nextIndex];
-
-      if (nextTrack) {
-        play(nextTrack, state.playlist);
-      }
-
-      return state;
-    });
+    const nextIndex =
+      state.currentIndex === state.playlist.length - 1
+        ? 0
+        : state.currentIndex + 1;
+    const nextTrack = state.playlist[nextIndex];
+    if (nextTrack) {
+      play(nextTrack, state.playlist);
+    }
   }
 
   function previous() {
-    update((state) => {
-      if (state.playlist.length === 0 || state.currentIndex < 0) return state;
+    const state = getState();
+    if (state.playlist.length === 0 || state.currentIndex < 0) return;
 
-      const prevIndex =
-        state.currentIndex === 0
-          ? state.playlist.length - 1
-          : state.currentIndex - 1;
-      const prevTrack = state.playlist[prevIndex];
+    const currentTime = state.currentTime;
+    if (currentTime > RESTART_THRESHOLD_SEC && audioElement) {
+      seek(0);
+      return;
+    }
 
-      if (prevTrack) {
-        play(prevTrack, state.playlist);
-      }
-
-      return state;
-    });
+    const prevIndex =
+      state.currentIndex === 0
+        ? state.playlist.length - 1
+        : state.currentIndex - 1;
+    const prevTrack = state.playlist[prevIndex];
+    if (prevTrack) {
+      play(prevTrack, state.playlist);
+    }
   }
 
   function stop() {
@@ -197,25 +240,22 @@ function createPlaybackStore() {
   }
 
   function cleanup() {
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
+    }
     if (audioElement) {
       audioElement.pause();
       audioElement.src = "";
       audioElement = null;
     }
-    set({
-      currentTrack: null,
-      isPlaying: false,
-      currentTime: 0,
-      duration: 0,
-      volume: 1,
-      playlist: [],
-      currentIndex: -1,
-      isMuted: false,
-    });
+    currentState = { ...initialState };
+    set({ ...initialState });
   }
 
   return {
     subscribe,
+    getState,
     play,
     pause,
     resume,

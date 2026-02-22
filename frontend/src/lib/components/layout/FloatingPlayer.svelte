@@ -77,6 +77,14 @@
       : 0,
   );
 
+  const MARQUEE_TITLE_LENGTH = 28;
+  const titleNeedsMarquee = $derived(
+    (playbackState.currentTrack?.title?.length ?? 0) > MARQUEE_TITLE_LENGTH,
+  );
+  const artistNeedsMarquee = $derived(
+    (playbackState.currentTrack?.artist?.length ?? 0) > MARQUEE_TITLE_LENGTH,
+  );
+
   function handlePlayPause() {
     playbackStore.toggle();
   }
@@ -128,31 +136,53 @@
       >
         <!-- 3-column grid keeps center controls truly centered -->
         <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-4">
-          <!-- Track Info (Left) -->
-          <div
-            class="flex items-center gap-3 min-w-0 max-w-[320px] overflow-hidden justify-self-start"
-          >
+          <!-- Track Info (Left) – keyed so it updates when track changes -->
+          {#key playbackState.currentTrack?.path}
             <div
-              class="w-12 h-12 bg-background rounded-lg flex items-center justify-center border border-border shrink-0
-                   {playbackState.isPlaying ? 'animate-pulse' : ''}"
+              class="flex items-center gap-3 min-w-0 max-w-[300px] overflow-hidden justify-self-start"
             >
-              <FileAudioIcon size={24} weight="duotone" class="text-accent" />
-            </div>
-            <div class="min-w-0 flex-1">
               <div
-                class="font-bold text-text-primary truncate text-sm"
-                title={playbackState.currentTrack.title}
+                class="w-12 h-12 bg-background rounded-lg flex items-center justify-center border border-border shrink-0
+                     {playbackState.isPlaying ? 'animate-pulse' : ''}"
               >
-                {playbackState.currentTrack.title}
+                <FileAudioIcon size={24} weight="duotone" class="text-accent" />
               </div>
-              <div
-                class="text-xs text-text-secondary truncate"
-                title={playbackState.currentTrack.artist || "Unknown Artist"}
-              >
-                {playbackState.currentTrack.artist || "Unknown Artist"}
+              <div class="min-w-0 flex-1 overflow-hidden">
+                <!-- Title: marquee when long, else truncate -->
+                <div
+                  class="font-bold text-text-primary text-sm overflow-hidden"
+                  title={playbackState.currentTrack.title}
+                >
+                  {#if titleNeedsMarquee}
+                    <div class="marquee-container">
+                      <div class="marquee-content" aria-label={playbackState.currentTrack.title}>
+                        <span class="marquee-text">{playbackState.currentTrack.title}</span>
+                        <span class="marquee-text" aria-hidden="true">{playbackState.currentTrack.title}</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="truncate">{playbackState.currentTrack.title}</div>
+                  {/if}
+                </div>
+                <!-- Artist: marquee when long, else truncate -->
+                <div
+                  class="text-xs text-text-secondary overflow-hidden mt-0.5"
+                  title={playbackState.currentTrack.artist || "Unknown Artist"}
+                >
+                  {#if artistNeedsMarquee}
+                    <div class="marquee-container marquee-slow">
+                      <div class="marquee-content" aria-label={playbackState.currentTrack.artist || "Unknown Artist"}>
+                        <span class="marquee-text">{playbackState.currentTrack.artist || "Unknown Artist"}</span>
+                        <span class="marquee-text" aria-hidden="true">{playbackState.currentTrack.artist || "Unknown Artist"}</span>
+                      </div>
+                    </div>
+                  {:else}
+                    <div class="truncate">{playbackState.currentTrack.artist || "Unknown Artist"}</div>
+                  {/if}
+                </div>
               </div>
             </div>
-          </div>
+          {/key}
 
           <!-- Playback Controls (Center) -->
           <div
@@ -265,6 +295,40 @@
     to {
       opacity: 1;
       transform: translate(-50%, 0);
+    }
+  }
+
+  .marquee-container {
+    overflow: hidden;
+    white-space: nowrap;
+  }
+
+  .marquee-content {
+    display: inline-flex;
+    width: max-content;
+    animation: marquee 12s linear infinite;
+  }
+
+  .marquee-slow .marquee-content {
+    animation-duration: 18s;
+  }
+
+  .marquee-text {
+    white-space: nowrap;
+    padding-right: 2rem;
+    flex-shrink: 0;
+  }
+
+  .marquee-text:first-child {
+    padding-right: 3rem;
+  }
+
+  @keyframes marquee {
+    from {
+      transform: translateX(0);
+    }
+    to {
+      transform: translateX(-50%);
     }
   }
 
