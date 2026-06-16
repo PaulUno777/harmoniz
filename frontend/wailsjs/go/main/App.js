@@ -6,6 +6,18 @@ export function AnalyzeArtists(arg1) {
   return window['go']['main']['App']['AnalyzeArtists'](arg1);
 }
 
+export function AnalyzeForOrganize(arg1) {
+  return window['go']['main']['App']['AnalyzeForOrganize'](arg1);
+}
+
+export function ApplyAllHighConfidence(arg1, arg2, arg3) {
+  return window['go']['main']['App']['ApplyAllHighConfidence'](arg1, arg2, arg3);
+}
+
+export function ApplyOrganizerSuggestion(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['ApplyOrganizerSuggestion'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
 export function DetectDuplicates(arg1) {
   return window['go']['main']['App']['DetectDuplicates'](arg1);
 }
@@ -16,6 +28,10 @@ export function ListTracks(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
 
 export function OpenFolderDialog() {
   return window['go']['main']['App']['OpenFolderDialog']();
+}
+
+export function PreviewFilenameTemplate(arg1, arg2) {
+  return window['go']['main']['App']['PreviewFilenameTemplate'](arg1, arg2);
 }
 
 export function RenameTrack(arg1, arg2) {

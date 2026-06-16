@@ -9,6 +9,8 @@ import (
 	"harmoniz/internal/core/services/organize"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/wailsapp/wails/v2/pkg/runtime"
@@ -22,6 +24,7 @@ type App struct {
 	clustering *analysis.ClusteringService
 	deduper    *analysis.DeduplicationService
 	renamer    *organize.RenameService
+	suggester  *organize.SuggestionService
 	metaWriter ports.MetadataWriter
 }
 
@@ -38,6 +41,7 @@ func NewApp(
 		clustering: analysis.NewClusteringService(repo),
 		deduper:    analysis.NewDeduplicationService(repo),
 		renamer:    organize.NewRenameService(fsPort, repo),
+		suggester:  organize.NewSuggestionService(repo),
 		metaWriter: metaWriter,
 	}
 }
@@ -176,4 +180,161 @@ func (a *App) RenameTrack(id uint64, newFilename string) (string, error) {
 	}
 
 	return a.renamer.RenameTrack(a.ctx, tracks[0], newFilename)
+}
+
+// AnalyzeForOrganize analyzes all tracks under root and returns per-track metadata suggestions.
+func (a *App) AnalyzeForOrganize(root string) ([]domain.OrganizerSuggestion, error) {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+	return a.suggester.AnalyzeRoot(a.ctx, root)
+}
+
+// ApplyOrganizerSuggestion applies selected metadata fields to a track (non-destructive).
+// Empty string values for string fields mean "keep existing"; 0 for int fields means "keep existing".
+// filenameTemplate: if non-empty, also rename the file using this template after updating tags.
+// Returns the new absolute file path (unchanged if no rename was performed).
+func (a *App) ApplyOrganizerSuggestion(trackID uint64, artist, title, album string, year, trackNum int, filenameTemplate string) (string, error) {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+
+	tracks, err := a.repo.GetTracks(a.ctx, []uint64{trackID})
+	if err != nil || len(tracks) == 0 {
+		return "", fmt.Errorf("track %d not found", trackID)
+	}
+	t := tracks[0]
+
+	// Merge: keep existing value when new value is empty/zero
+	newArtist := mergeStr(artist, t.ArtistRaw)
+	newTitle := mergeStr(title, t.Title)
+	newAlbum := mergeStr(album, t.AlbumRaw)
+	newYear := mergeInt(year, t.Year)
+	newTrackNum := mergeInt(trackNum, t.TrackNum)
+
+	// Write tags to file (best-effort; non-MP3 formats log a warning)
+	if writeErr := a.metaWriter.WriteMetadata(t.Path, ports.TrackMetadata{
+		Artist: newArtist, Title: newTitle, Album: newAlbum,
+		Year: newYear, TrackNum: newTrackNum,
+	}); writeErr != nil {
+		logger.Log.Warn("Tag write skipped during organize", "path", t.Path, "reason", writeErr)
+	}
+
+	if err := a.repo.UpdateTrackTags(a.ctx, trackID, newArtist, newTitle, newAlbum, newYear, newTrackNum); err != nil {
+		return "", fmt.Errorf("DB update failed: %w", err)
+	}
+
+	// Rename if template provided
+	newPath := t.Path
+	if strings.TrimSpace(filenameTemplate) != "" {
+		updated := t
+		updated.ArtistRaw = newArtist
+		updated.Title = newTitle
+		updated.AlbumRaw = newAlbum
+		updated.Year = newYear
+		updated.TrackNum = newTrackNum
+
+		newFilename := organize.ApplyTemplate(filenameTemplate, updated)
+		if newFilename != "" && newFilename != t.Filename {
+			if renamedPath, renameErr := a.renamer.RenameTrack(a.ctx, updated, newFilename); renameErr == nil {
+				newPath = renamedPath
+			} else {
+				logger.Log.Warn("Rename skipped during organize", "reason", renameErr)
+			}
+		}
+	}
+
+	return newPath, nil
+}
+
+// ApplyAllHighConfidence applies high-confidence suggestions (score >= minConfidence, fields >= 0.75)
+// across the entire root. Returns count of successfully updated tracks.
+func (a *App) ApplyAllHighConfidence(root string, minConfidence float64, filenameTemplate string) (int, error) {
+	suggestions, err := a.AnalyzeForOrganize(root)
+	if err != nil {
+		return 0, err
+	}
+
+	count := 0
+	for _, s := range suggestions {
+		if s.Score < minConfidence || len(s.Fields) == 0 {
+			continue
+		}
+		artist := highConfStr(s.Fields, "artist", 0.75)
+		title := highConfStr(s.Fields, "title", 0.75)
+		album := highConfStr(s.Fields, "album", 0.75)
+		year := highConfInt(s.Fields, "year", 0.75)
+		trackNum := highConfInt(s.Fields, "track_num", 0.75)
+
+		if artist == "" && title == "" && album == "" && year == 0 && trackNum == 0 {
+			continue
+		}
+
+		if _, applyErr := a.ApplyOrganizerSuggestion(s.TrackID, artist, title, album, year, trackNum, filenameTemplate); applyErr != nil {
+			logger.Log.Warn("Batch apply failed", "track_id", s.TrackID, "error", applyErr)
+			continue
+		}
+		count++
+	}
+
+	runtime.EventsEmit(a.ctx, "organize:batch_done", count)
+	return count, nil
+}
+
+// PreviewFilenameTemplate previews the filenames that would result from applying the template
+// to all tracks under root. Returns only entries where the filename would change.
+func (a *App) PreviewFilenameTemplate(root string, tmpl string) ([]domain.FilenamePreview, error) {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+	if strings.TrimSpace(tmpl) == "" {
+		return nil, nil
+	}
+
+	tracks, _, err := a.repo.ListTracks(a.ctx, domain.TrackFilter{Root: root, Limit: 50000})
+	if err != nil {
+		return nil, err
+	}
+
+	previews := make([]domain.FilenamePreview, 0)
+	for _, t := range tracks {
+		after := organize.ApplyTemplate(tmpl, t)
+		if after != "" && after != t.Filename {
+			previews = append(previews, domain.FilenamePreview{
+				TrackID: t.ID,
+				Before:  t.Filename,
+				After:   after,
+			})
+		}
+	}
+	return previews, nil
+}
+
+func mergeStr(newVal, existing string) string {
+	if strings.TrimSpace(newVal) == "" {
+		return existing
+	}
+	return newVal
+}
+
+func mergeInt(newVal, existing int) int {
+	if newVal == 0 {
+		return existing
+	}
+	return newVal
+}
+
+func highConfStr(fields map[string]domain.FieldSuggestion, key string, threshold float64) string {
+	if f, ok := fields[key]; ok && f.Confidence >= threshold {
+		return f.Value
+	}
+	return ""
+}
+
+func highConfInt(fields map[string]domain.FieldSuggestion, key string, threshold float64) int {
+	if f, ok := fields[key]; ok && f.Confidence >= threshold {
+		n, _ := strconv.Atoi(f.Value)
+		return n
+	}
+	return 0
 }

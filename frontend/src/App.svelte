@@ -317,7 +317,7 @@
         {#if activeTab === "settings"}
           <Settings />
         {:else if activeTab === "organizer"}
-          <OrganizerView onBrowse={handleBrowse} />
+          <OrganizerView libraryPath={currentLibraryPath} onBrowse={handleBrowse} />
         {:else if activeTab === "cleaner"}
           <CleanerView onBrowse={handleBrowse} />
         {:else if !currentLibraryPath}

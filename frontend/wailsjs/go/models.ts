@@ -20,6 +20,38 @@ export namespace domain {
 	        this.confidence_level = source["confidence_level"];
 	    }
 	}
+	export class FieldSuggestion {
+	    value: string;
+	    confidence: number;
+	    source: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FieldSuggestion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.value = source["value"];
+	        this.confidence = source["confidence"];
+	        this.source = source["source"];
+	    }
+	}
+	export class FilenamePreview {
+	    track_id: number;
+	    before: string;
+	    after: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new FilenamePreview(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.track_id = source["track_id"];
+	        this.before = source["before"];
+	        this.after = source["after"];
+	    }
+	}
 	export class Track {
 	    id: number;
 	    path: string;
@@ -84,6 +116,44 @@ export namespace domain {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.Tracks = this.convertValues(source["Tracks"], Track);
 	        this.Total = source["Total"];
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
+	export class OrganizerSuggestion {
+	    track_id: number;
+	    track: Track;
+	    score: number;
+	    fields: Record<string, FieldSuggestion>;
+	    issues: string[];
+	
+	    static createFrom(source: any = {}) {
+	        return new OrganizerSuggestion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.track_id = source["track_id"];
+	        this.track = this.convertValues(source["track"], Track);
+	        this.score = source["score"];
+	        this.fields = this.convertValues(source["fields"], FieldSuggestion, true);
+	        this.issues = source["issues"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

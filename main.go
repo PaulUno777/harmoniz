@@ -68,6 +68,9 @@ func main() {
 		Height: 768,
 
 		MinHeight: 768,
+		Debug: options.Debug{
+			OpenInspectorOnStartup: true,
+		},
 		AssetServer: &assetserver.Options{
 			Assets:  assets,
 			Handler: streamHandler(),

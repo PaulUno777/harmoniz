@@ -25,4 +25,27 @@ export interface ArtistSuggestion {
   confidence_level: string
 }
 
+/** Phase 5b organizer: per-field suggestion with confidence and source info */
+export interface FieldSuggestion {
+  value: string
+  confidence: number  // 0.0–1.0
+  source: 'path' | 'filename' | 'neighbor'
+}
+
+/** Phase 5b organizer: all suggestions for a single track */
+export interface OrganizerSuggestion {
+  track_id: number
+  track: Track
+  score: number  // 0–100 (confidence of suggestions; 0 = no suggestions or already complete)
+  fields: Record<string, FieldSuggestion>  // keys: "artist" "title" "album" "year" "track_num"
+  issues: string[]
+}
+
+/** Phase 5b organizer: before/after filename pair for template preview */
+export interface FilenamePreview {
+  track_id: number
+  before: string
+  after: string
+}
+
 export type TabId = 'library' | 'organizer' | 'cleaner' | 'settings'

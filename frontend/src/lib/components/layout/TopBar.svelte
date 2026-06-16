@@ -23,8 +23,10 @@
 
   let { activeTab, onBrowse, searchQuery, onSearchChange, onFilterToggle, activeFilterCount, onRunAnalysis, analysisLoading = false, hasLibrary = false }: Props = $props();
 
+  // "Run analysis" button is only shown for the cleaner tab (duplicate detection).
+  // The organizer tab manages its own analysis workflow internally.
   const showAnalyzeButton = $derived(
-    (activeTab === "organizer" || activeTab === "cleaner") &&
+    activeTab === "cleaner" &&
     typeof onRunAnalysis === "function"
   );
 </script>
