@@ -67,9 +67,73 @@ func (s *RenameService) RenameTrack(ctx context.Context, track domain.Track, new
 	return newPath, nil
 }
 
-// SanitizeFilename strips OS-illegal characters and trims whitespace.
-// Exported so it can be used for template-based batch rename (Phase 7).
-func SanitizeFilename(name string) string {
+// OrganizeTrack moves a track to newRelPath within libraryRoot, creating subdirectories
+// as needed and avoiding filename collisions by appending a counter suffix.
+// newRelPath may include path separators for subfolder organization
+// (e.g. "Artist/Artist - Title.mp3").
+func (s *RenameService) OrganizeTrack(ctx context.Context, track domain.Track, newRelPath, libraryRoot string) (string, error) {
+	// Sanitize each path component individually (preserve '/' as separator)
+	parts := strings.Split(filepath.ToSlash(newRelPath), "/")
+	sanitized := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if c := SanitizePathComponent(p); c != "" {
+			sanitized = append(sanitized, c)
+		}
+	}
+	if len(sanitized) == 0 {
+		return "", fmt.Errorf("path is empty after sanitization")
+	}
+
+	newPath := filepath.Join(append([]string{libraryRoot}, sanitized...)...)
+
+	// Preserve extension if the template produced none
+	if filepath.Ext(newPath) == "" {
+		newPath += filepath.Ext(track.Path)
+	}
+
+	// Avoid collision: if target already exists and is not the same file, add counter
+	newPath = avoidCollision(newPath, track.Path)
+
+	if newPath == track.Path {
+		return track.Path, nil
+	}
+
+	logger.Log.Info("Organizing track", "from", track.Path, "to", newPath)
+
+	if err := s.fs.SafeMove(track.Path, newPath); err != nil {
+		return "", fmt.Errorf("move failed: %w", err)
+	}
+
+	if err := s.repo.UpdateTrackPath(ctx, track.ID, newPath); err != nil {
+		logger.Log.Warn("File moved but DB update failed", "newPath", newPath, "error", err)
+		return newPath, fmt.Errorf("file moved but DB update failed: %w", err)
+	}
+
+	return newPath, nil
+}
+
+// avoidCollision appends _2, _3 … until an unused path is found.
+// If targetPath == srcPath the file is the same, return as-is.
+func avoidCollision(targetPath, srcPath string) string {
+	if targetPath == srcPath {
+		return srcPath
+	}
+	if _, err := os.Stat(targetPath); os.IsNotExist(err) {
+		return targetPath
+	}
+	ext := filepath.Ext(targetPath)
+	base := strings.TrimSuffix(targetPath, ext)
+	for i := 2; i <= 999; i++ {
+		candidate := fmt.Sprintf("%s_%d%s", base, i, ext)
+		if _, err := os.Stat(candidate); os.IsNotExist(err) {
+			return candidate
+		}
+	}
+	return targetPath
+}
+
+// SanitizePathComponent sanitizes a single path component (no '/' allowed).
+func SanitizePathComponent(name string) string {
 	const illegal = `/\:*?"<>|` + "\x00"
 	var b strings.Builder
 	for _, r := range name {
@@ -80,4 +144,10 @@ func SanitizeFilename(name string) string {
 		}
 	}
 	return strings.TrimSpace(b.String())
+}
+
+// SanitizeFilename strips OS-illegal characters and trims whitespace.
+// Exported so it can be used for template-based batch rename (Phase 7).
+func SanitizeFilename(name string) string {
+	return SanitizePathComponent(name)
 }

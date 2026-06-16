@@ -75,9 +75,10 @@
   }
 
   // Close on click outside or Escape
+  let menuEl: HTMLElement
+
   function handleWindowClick(e: MouseEvent) {
-    const el = (e.target as HTMLElement).closest('[data-context-menu]')
-    if (!el) onClose()
+    if (menuEl && !menuEl.contains(e.target as Node)) onClose()
   }
 
   function handleKeyDown(e: KeyboardEvent) {
@@ -88,7 +89,7 @@
 <svelte:window on:mousedown={handleWindowClick} on:keydown={handleKeyDown} />
 
 <div
-  data-context-menu
+  bind:this={menuEl}
   class="fixed z-50 w-80 bg-surface border border-border rounded-xl shadow-2xl overflow-hidden"
   style="left: {Math.min(x, window.innerWidth - 340)}px; top: {Math.min(y, window.innerHeight - 440)}px"
 >

@@ -30,8 +30,16 @@
     DetectDuplicates,
   } from "../wailsjs/go/main/App.js";
   import { analysis } from "./lib/stores/analysis";
+  import { organizer } from "./lib/stores/organizer";
+  import { toast } from "./lib/stores/toast";
+
+  // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
+  const orgSelectedSuggestion = organizer.selectedSuggestion
   import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
+  import OrganizerDetailPanel from "./lib/components/organizer/OrganizerDetailPanel.svelte";
   import CleanerView from "./lib/components/analysis/CleanerView.svelte";
+  // @ts-ignore
+  import { ApplyOrganizerSuggestion } from "../wailsjs/go/main/App.js";
 
   let activeTab = $state<TabId>("library");
   let selectedTrack = $state<Track | null>(null);
@@ -266,6 +274,23 @@
     tracks = tracks.map(t => t.id === updated.id ? updated : t)
   }
 
+  async function handleOrganizerApply(trackID: number, fields: Record<string, string>) {
+    try {
+      const template = get(organizer.filenameTemplate)
+      const artist   = fields['artist']    ?? ''
+      const title    = fields['title']     ?? ''
+      const album    = fields['album']     ?? ''
+      const year     = fields['year']      ? parseInt(fields['year'])      : 0
+      const trackNum = fields['track_num'] ? parseInt(fields['track_num']) : 0
+      await ApplyOrganizerSuggestion(trackID, artist, title, album, year, trackNum, template, currentLibraryPath)
+      organizer.updateTrackSuggestion(trackID, fields)
+      toast.success(get(t)('saved'))
+    } catch (e) {
+      toast.error(`${get(t)('saveError')}: ${e}`)
+      throw e
+    }
+  }
+
   async function handleRunAnalysis() {
     if (!currentLibraryPath) return;
     analysis.setError(null);
@@ -349,7 +374,15 @@
   </div>
 
   <aside class="w-80 shrink-0 h-full overflow-hidden flex flex-col">
-    <ContextPanel bind:selectedTrack onTrackSaved={handleTrackSaved} />
+    {#if activeTab === 'organizer'}
+      <OrganizerDetailPanel
+        suggestion={$orgSelectedSuggestion}
+        onApply={handleOrganizerApply}
+        onClose={() => organizer.setSelectedTrack(null)}
+      />
+    {:else}
+      <ContextPanel bind:selectedTrack onTrackSaved={handleTrackSaved} />
+    {/if}
   </aside>
 
   <!-- Filter Panel -->

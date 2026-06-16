@@ -9,6 +9,7 @@ import (
 	"harmoniz/internal/core/services/organize"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -192,9 +193,12 @@ func (a *App) AnalyzeForOrganize(root string) ([]domain.OrganizerSuggestion, err
 
 // ApplyOrganizerSuggestion applies selected metadata fields to a track (non-destructive).
 // Empty string values for string fields mean "keep existing"; 0 for int fields means "keep existing".
-// filenameTemplate: if non-empty, also rename the file using this template after updating tags.
+// filenameTemplate: if non-empty, renames/moves the file using this template after updating tags.
+//   - Template may include '/' to organize into subfolders (e.g. "{artist}/{artist} - {title}.{ext}").
+//   - libraryRoot: required when the template contains '/' so the subfolder is created inside the root.
+//
 // Returns the new absolute file path (unchanged if no rename was performed).
-func (a *App) ApplyOrganizerSuggestion(trackID uint64, artist, title, album string, year, trackNum int, filenameTemplate string) (string, error) {
+func (a *App) ApplyOrganizerSuggestion(trackID uint64, artist, title, album string, year, trackNum int, filenameTemplate, libraryRoot string) (string, error) {
 	if a.ctx == nil {
 		a.ctx = context.Background()
 	}
@@ -224,7 +228,7 @@ func (a *App) ApplyOrganizerSuggestion(trackID uint64, artist, title, album stri
 		return "", fmt.Errorf("DB update failed: %w", err)
 	}
 
-	// Rename if template provided
+	// Rename / organize if template provided
 	newPath := t.Path
 	if strings.TrimSpace(filenameTemplate) != "" {
 		updated := t
@@ -234,12 +238,25 @@ func (a *App) ApplyOrganizerSuggestion(trackID uint64, artist, title, album stri
 		updated.Year = newYear
 		updated.TrackNum = newTrackNum
 
-		newFilename := organize.ApplyTemplate(filenameTemplate, updated)
-		if newFilename != "" && newFilename != t.Filename {
-			if renamedPath, renameErr := a.renamer.RenameTrack(a.ctx, updated, newFilename); renameErr == nil {
-				newPath = renamedPath
+		newRelPath := organize.ApplyTemplate(filenameTemplate, updated)
+		if newRelPath != "" {
+			if strings.Contains(newRelPath, "/") && strings.TrimSpace(libraryRoot) != "" {
+				// Path-style template → move into organized subfolder within libraryRoot
+				if movedPath, moveErr := a.renamer.OrganizeTrack(a.ctx, updated, newRelPath, libraryRoot); moveErr == nil {
+					newPath = movedPath
+				} else {
+					logger.Log.Warn("Organize (move) skipped", "reason", moveErr)
+				}
 			} else {
-				logger.Log.Warn("Rename skipped during organize", "reason", renameErr)
+				// Simple filename rename within the same directory
+				newFilename := filepath.Base(newRelPath)
+				if newFilename != t.Filename {
+					if renamedPath, renameErr := a.renamer.RenameTrack(a.ctx, updated, newFilename); renameErr == nil {
+						newPath = renamedPath
+					} else {
+						logger.Log.Warn("Rename skipped during organize", "reason", renameErr)
+					}
+				}
 			}
 		}
 	}
@@ -270,7 +287,7 @@ func (a *App) ApplyAllHighConfidence(root string, minConfidence float64, filenam
 			continue
 		}
 
-		if _, applyErr := a.ApplyOrganizerSuggestion(s.TrackID, artist, title, album, year, trackNum, filenameTemplate); applyErr != nil {
+		if _, applyErr := a.ApplyOrganizerSuggestion(s.TrackID, artist, title, album, year, trackNum, filenameTemplate, root); applyErr != nil {
 			logger.Log.Warn("Batch apply failed", "track_id", s.TrackID, "error", applyErr)
 			continue
 		}

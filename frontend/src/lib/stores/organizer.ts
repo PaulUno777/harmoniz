@@ -9,9 +9,15 @@ const error = writable<string | null>(null)
 const filenameTemplate = writable('{artist} - {title}.{ext}')
 const filenamePreviews = writable<FilenamePreview[]>([])
 const lastAppliedCount = writable(0)
+const selectedTrackId = writable<number | null>(null)
 
 const withSuggestions = derived(suggestions, ($s) =>
   $s.filter(s => Object.keys(s.fields).length > 0)
+)
+
+const selectedSuggestion = derived(
+  [suggestions, selectedTrackId],
+  ([$s, $id]) => $id !== null ? ($s.find(s => s.track_id === $id) ?? null) : null
 )
 
 const highConfidenceCount = derived(suggestions, ($s) =>
@@ -32,6 +38,8 @@ export const organizer = {
   withSuggestions,
   highConfidenceCount,
   completeCount,
+  selectedTrackId,
+  selectedSuggestion,
 
   startAnalysis() {
     status.set('analyzing')
@@ -62,7 +70,7 @@ export const organizer = {
     filenamePreviews.set(previews ?? [])
   },
 
-  /** Update a single track's suggestion in place after applying it. */
+  /** Mark an entire track as fully applied (all fields done). */
   markApplied(trackID: number) {
     suggestions.update($s => $s.map(s =>
       s.track_id === trackID
@@ -71,11 +79,43 @@ export const organizer = {
     ))
   },
 
+  /**
+   * After applying specific fields, remove them from the suggestion and update
+   * the track's cached metadata so the detail panel reflects the new state.
+   */
+  updateTrackSuggestion(trackID: number, appliedFields: Record<string, string>) {
+    suggestions.update($s => $s.map(s => {
+      if (s.track_id !== trackID) return s
+      const fields = { ...s.fields }
+      for (const key of Object.keys(appliedFields)) delete fields[key]
+
+      // Reflect applied values on the cached track object
+      const track = { ...s.track }
+      if (appliedFields['artist'])    track.artist_raw = appliedFields['artist']
+      if (appliedFields['title'])     track.title      = appliedFields['title']
+      if (appliedFields['album'])     track.album_raw  = appliedFields['album']
+      if (appliedFields['year'])      track.year       = parseInt(appliedFields['year'])    || track.year
+      if (appliedFields['track_num']) track.track_num  = parseInt(appliedFields['track_num']) || track.track_num
+
+      const remaining = Object.values(fields)
+      const score = remaining.length === 0
+        ? 0
+        : Math.min(remaining.reduce((sum, f) => sum + f.confidence, 0) / remaining.length * 100, 100)
+
+      return { ...s, fields, track, score, issues: remaining.length === 0 ? [] : s.issues }
+    }))
+  },
+
+  setSelectedTrack(id: number | null) {
+    selectedTrackId.set(id)
+  },
+
   reset() {
     suggestions.set([])
     status.set('idle')
     error.set(null)
     filenamePreviews.set([])
     lastAppliedCount.set(0)
+    selectedTrackId.set(null)
   },
 }
