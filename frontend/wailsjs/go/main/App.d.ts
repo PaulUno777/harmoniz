@@ -10,4 +10,8 @@ export function ListTracks(arg1:string,arg2:string,arg3:number,arg4:number,arg5:
 
 export function OpenFolderDialog():Promise<string>;
 
+export function RenameTrack(arg1:number,arg2:string):Promise<string>;
+
 export function ScanLibrary(arg1:string):Promise<void>;
+
+export function UpdateTrackTags(arg1:number,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<void>;

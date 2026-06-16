@@ -18,6 +18,14 @@ export function OpenFolderDialog() {
   return window['go']['main']['App']['OpenFolderDialog']();
 }
 
+export function RenameTrack(arg1, arg2) {
+  return window['go']['main']['App']['RenameTrack'](arg1, arg2);
+}
+
 export function ScanLibrary(arg1) {
   return window['go']['main']['App']['ScanLibrary'](arg1);
+}
+
+export function UpdateTrackTags(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['UpdateTrackTags'](arg1, arg2, arg3, arg4, arg5, arg6);
 }

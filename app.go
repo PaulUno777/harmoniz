@@ -2,9 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"harmoniz/internal/core/domain"
 	"harmoniz/internal/core/ports"
 	"harmoniz/internal/core/services/analysis"
+	"harmoniz/internal/core/services/organize"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
 	"time"
@@ -15,17 +17,28 @@ import (
 // App struct
 type App struct {
 	ctx        context.Context
+	repo       ports.TrackRepository
 	scanner    *scanner.Service
 	clustering *analysis.ClusteringService
 	deduper    *analysis.DeduplicationService
+	renamer    *organize.RenameService
+	metaWriter ports.MetadataWriter
 }
 
 // NewApp creates a new App application struct
-func NewApp(scannerService *scanner.Service, repo ports.TrackRepository) *App {
+func NewApp(
+	scannerService *scanner.Service,
+	repo ports.TrackRepository,
+	fsPort ports.FilesystemPort,
+	metaWriter ports.MetadataWriter,
+) *App {
 	return &App{
+		repo:       repo,
 		scanner:    scannerService,
 		clustering: analysis.NewClusteringService(repo),
 		deduper:    analysis.NewDeduplicationService(repo),
+		renamer:    organize.NewRenameService(fsPort, repo),
+		metaWriter: metaWriter,
 	}
 }
 
@@ -114,4 +127,53 @@ func (a *App) DetectDuplicates(root string) ([][]domain.Track, error) {
 		a.ctx = context.Background()
 	}
 	return a.deduper.DetectDuplicates(a.ctx, root)
+}
+
+// UpdateTrackTags writes new metadata to the audio file (best-effort, MP3 only in Phase 5)
+// and updates all metadata fields in the database.
+func (a *App) UpdateTrackTags(id uint64, artist, title, album string, year, trackNum int) error {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+
+	tracks, err := a.repo.GetTracks(a.ctx, []uint64{id})
+	if err != nil {
+		return fmt.Errorf("failed to retrieve track: %w", err)
+	}
+	if len(tracks) == 0 {
+		return fmt.Errorf("track %d not found", id)
+	}
+	track := tracks[0]
+
+	// Write tags to file — best-effort; non-MP3 formats log a warning and continue.
+	if writeErr := a.metaWriter.WriteMetadata(track.Path, ports.TrackMetadata{
+		Artist:   artist,
+		Title:    title,
+		Album:    album,
+		Year:     year,
+		TrackNum: trackNum,
+	}); writeErr != nil {
+		logger.Log.Warn("Tag write to file skipped", "path", track.Path, "reason", writeErr)
+	}
+
+	return a.repo.UpdateTrackTags(a.ctx, id, artist, title, album, year, trackNum)
+}
+
+// RenameTrack renames the audio file on disk and updates the path in the database.
+// newFilename is the bare filename (with or without extension); the directory is preserved.
+// Returns the new absolute path on success.
+func (a *App) RenameTrack(id uint64, newFilename string) (string, error) {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+
+	tracks, err := a.repo.GetTracks(a.ctx, []uint64{id})
+	if err != nil {
+		return "", fmt.Errorf("failed to retrieve track: %w", err)
+	}
+	if len(tracks) == 0 {
+		return "", fmt.Errorf("track %d not found", id)
+	}
+
+	return a.renamer.RenameTrack(a.ctx, tracks[0], newFilename)
 }

@@ -39,7 +39,7 @@ type Track struct {
 	// Status
 	IsDeleted    bool        `json:"is_deleted"`
 	DeletedAt    *int64      `json:"deleted_at"`    // Unix timestamp
-	DeleteReason string      `json:"delete_reason"` // e.g., "PRUNE", "USER"
+	DeleteReason string      `json:"delete_reason"` // e.g., "PRUNE", "USER"the 
 	Status       TrackStatus `json:"status"`
 }
 

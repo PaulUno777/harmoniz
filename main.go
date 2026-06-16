@@ -3,6 +3,8 @@ package main
 import (
 	"embed"
 	"harmoniz/internal/adapters/db"
+	"harmoniz/internal/adapters/fs"
+	"harmoniz/internal/adapters/metadata"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
 	"log/slog"
@@ -53,9 +55,11 @@ func main() {
 
 	// Setup Services
 	scannerService := scanner.NewService(dbAdapter)
+	fsAdapter := fs.NewAdapter()
+	metaWriter := metadata.NewAdapter()
 
 	// Create an instance of the app structure (dbAdapter implements ports.TrackRepository)
-	app := NewApp(scannerService, dbAdapter)
+	app := NewApp(scannerService, dbAdapter, fsAdapter, metaWriter)
 
 	// Create application with options
 	err = wails.Run(&options.App{

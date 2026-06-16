@@ -21,8 +21,12 @@ type TrackRepository interface {
 	// StreamUniqueArtists streams unique normalized artist names. root restricts scope; empty = all.
 	StreamUniqueArtists(ctx context.Context, root string) (<-chan string, error)
 
-	// UpdateTrackPath updates the file path of a track.
+	// UpdateTrackPath updates the file path and filename of a track after a rename.
 	UpdateTrackPath(ctx context.Context, id uint64, newPath string) error
+
+	// UpdateTrackTags writes new metadata fields into the DB for the given track.
+	// Re-computes artist_norm and album_norm. Sets status = 'modified'.
+	UpdateTrackTags(ctx context.Context, id uint64, artist, title, album string, year, trackNum int) error
 
 	// Transaction methods
 	CreateTransaction(ctx context.Context, tx domain.Transaction) error

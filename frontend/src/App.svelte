@@ -9,6 +9,7 @@
   import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
   import FilterPanel, { type FilterState } from "./lib/components/layout/FilterPanel.svelte";
   import FloatingPlayer from "./lib/components/layout/FloatingPlayer.svelte";
+  import Toast from "./lib/components/ui/Toast.svelte";
   import { theme } from "./lib/stores/theme";
   import { t } from "./lib/stores/i18n";
   import { get } from "svelte/store";
@@ -260,6 +261,11 @@
 
   const analysisLoadingStore = analysis.loading;
 
+  function handleTrackSaved(updated: Track) {
+    selectedTrack = updated
+    tracks = tracks.map(t => t.id === updated.id ? updated : t)
+  }
+
   async function handleRunAnalysis() {
     if (!currentLibraryPath) return;
     analysis.setError(null);
@@ -343,7 +349,7 @@
   </div>
 
   <aside class="w-80 shrink-0 h-full overflow-hidden flex flex-col">
-    <ContextPanel bind:selectedTrack />
+    <ContextPanel bind:selectedTrack onTrackSaved={handleTrackSaved} />
   </aside>
 
   <!-- Filter Panel -->
@@ -354,3 +360,6 @@
     initialFilters={filters}
   />
 </div>
+
+<!-- Global toast notifications -->
+<Toast />

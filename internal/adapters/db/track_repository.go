@@ -292,8 +292,71 @@ func (a *Adapter) StreamUniqueArtists(ctx context.Context, root string) (<-chan 
 }
 
 func (a *Adapter) UpdateTrackPath(ctx context.Context, id uint64, newPath string) error {
-	return nil
+	newFilename := filepath.Base(newPath)
+	_, err := a.Conn.ExecContext(ctx,
+		`UPDATE tracks SET path = ?, filename = ?, status = 'modified' WHERE id = ?`,
+		newPath, newFilename, id,
+	)
+	return err
 }
+
+func (a *Adapter) UpdateTrackTags(ctx context.Context, id uint64, artist, title, album string, year, trackNum int) error {
+	artistNorm := domain.NormalizeArtist(artist)
+	albumNorm := domain.NormalizeArtist(album)
+	_, err := a.Conn.ExecContext(ctx,
+		`UPDATE tracks SET artist_raw = ?, artist_norm = ?, album_raw = ?, album_norm = ?, title = ?, year = ?, track_num = ?, status = 'modified' WHERE id = ?`,
+		artist, artistNorm, album, albumNorm, title, year, trackNum, id,
+	)
+	return err
+}
+
+func (a *Adapter) GetTracks(ctx context.Context, ids []uint64) ([]domain.Track, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	placeholders := strings.Repeat("?,", len(ids))
+	placeholders = placeholders[:len(placeholders)-1]
+	args := make([]interface{}, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	query := `SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status FROM tracks WHERE id IN (` + placeholders + `)`
+	rows, err := a.Conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTracks(rows)
+}
+
+func (a *Adapter) GetPathToIDMap(ctx context.Context) (map[string]uint64, error) {
+	rows, err := a.Conn.QueryContext(ctx, `SELECT path, id FROM tracks WHERE is_deleted = 0`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	m := make(map[string]uint64)
+	for rows.Next() {
+		var path string
+		var id uint64
+		if err := rows.Scan(&path, &id); err != nil {
+			return nil, err
+		}
+		m[path] = id
+	}
+	return m, nil
+}
+
+func (a *Adapter) SoftDelete(ctx context.Context, id uint64, reason string) error {
+	now := time.Now().Unix()
+	_, err := a.Conn.ExecContext(ctx,
+		`UPDATE tracks SET is_deleted = 1, deleted_at = ?, delete_reason = ? WHERE id = ?`,
+		now, reason, id,
+	)
+	return err
+}
+
+// Transaction methods — implemented in Phase 8 when the transactions table is added.
 
 func (a *Adapter) CreateTransaction(ctx context.Context, tx domain.Transaction) error {
 	return nil
@@ -308,17 +371,5 @@ func (a *Adapter) UpdateStepStatus(ctx context.Context, txID string, stepIndex i
 }
 
 func (a *Adapter) GetPendingTransactions(ctx context.Context) ([]domain.Transaction, error) {
-	return nil, nil
-}
-
-func (a *Adapter) SoftDelete(ctx context.Context, id uint64, reason string) error {
-	return nil
-}
-
-func (a *Adapter) GetTracks(ctx context.Context, ids []uint64) ([]domain.Track, error) {
-	return nil, nil
-}
-
-func (a *Adapter) GetPathToIDMap(ctx context.Context) (map[string]uint64, error) {
 	return nil, nil
 }

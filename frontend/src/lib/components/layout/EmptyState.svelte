@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { MusicNotesIcon } from "phosphor-svelte";
   import { t } from "../../stores/i18n";
+  import logoRaw from '../../../assets/images/hamonizer_logo.svg?raw'
 
   interface Props {
     onBrowse: () => void;
@@ -12,7 +12,7 @@
 
 <div class="h-full flex flex-col items-center justify-center p-12 text-center">
   <div
-    class="w-full max-w-lg aspect-video border-2 border-dashed rounded-3xl flex flex-col items-center justify-center gap-6 transition-all duration-500 pt-4
+    class="w-full max-w-lg border-2 border-dashed rounded-3xl flex flex-col items-center justify-center gap-6 py-14 px-10 transition-all duration-500
            {isDragOver
       ? 'border-accent bg-accent/5 scale-105 shadow-2xl shadow-accent/10'
       : 'border-border bg-surface/30 hover:border-text-muted hover:bg-surface/50'}"
@@ -20,27 +20,20 @@
     tabindex="0"
     data-file-drop-target
     style="--wails-drop-target: drop"
-    ondragover={(e) => {
-      e.preventDefault();
-      isDragOver = true;
-    }}
-    ondragleave={() => {
-      isDragOver = false;
-    }}
-    ondrop={(e) => {
-      e.preventDefault();
-      isDragOver = false;
-    }}
+    ondragover={(e) => { e.preventDefault(); isDragOver = true; }}
+    ondragleave={() => { isDragOver = false; }}
+    ondrop={(e) => { e.preventDefault(); isDragOver = false; }}
   >
+    <!-- Logo -->
     <div
-      class="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center text-accent"
+      class="w-20 h-20 text-accent transition-all duration-500
+             {isDragOver ? 'scale-110 drop-shadow-[0_0_20px_var(--color-accent)]' : 'opacity-80'}"
     >
-      <MusicNotesIcon size={32} weight="duotone" />
+      {@html logoRaw}
     </div>
+
     <div>
-      <h3 class="text-xl font-bold font-display mb-2">
-        {$t('emptyStateTitle')}
-      </h3>
+      <h3 class="text-xl font-bold font-display mb-2">{$t('emptyStateTitle')}</h3>
       <p class="text-text-secondary text-sm max-w-xs mx-auto leading-relaxed">
         {$t('emptyStateSubtitle')}
       </p>
@@ -55,9 +48,7 @@
       </button>
     </div>
 
-    <span
-      class="text-[10px] uppercase tracking-widest font-bold text-text-muted opacity-60"
-    >
+    <span class="text-[10px] uppercase tracking-widest font-bold text-text-muted opacity-50">
       {$t('dropZone')}
     </span>
   </div>
