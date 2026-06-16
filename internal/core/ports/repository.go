@@ -15,11 +15,11 @@ type TrackRepository interface {
 	GetAllPathsModTime() (map[string]int64, error)
 
 	// GetDuplicateCandidates returns tracks that share the same size (potential duplicates).
-	// It uses an optimized JOIN query to filter only relevant tracks.
-	GetDuplicateCandidates() ([]domain.Track, error)
+	// root restricts to tracks under that path (path = root OR path LIKE root/%); empty = all.
+	GetDuplicateCandidates(ctx context.Context, root string) ([]domain.Track, error)
 
-	// StreamUniqueArtists streams unique normalized artist names to a channel.
-	StreamUniqueArtists(ctx context.Context) (<-chan string, error)
+	// StreamUniqueArtists streams unique normalized artist names. root restricts scope; empty = all.
+	StreamUniqueArtists(ctx context.Context, root string) (<-chan string, error)
 
 	// UpdateTrackPath updates the file path of a track.
 	UpdateTrackPath(ctx context.Context, id uint64, newPath string) error

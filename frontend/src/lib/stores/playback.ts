@@ -17,7 +17,7 @@ const initialState: PlaybackState = {
   isPlaying: false,
   currentTime: 0,
   duration: 0,
-  volume: 1,
+  volume: 0.8,
   playlist: [],
   currentIndex: -1,
   isMuted: false,

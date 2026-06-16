@@ -15,4 +15,13 @@ export interface Track {
   status?: string
 }
 
+/** Phase 4 analysis: similar artist name suggestion from clustering */
+export interface ArtistSuggestion {
+  original: string
+  suggested: string
+  score: number
+  reason: string
+  confidence_level: string
+}
+
 export type TabId = 'library' | 'organizer' | 'cleaner' | 'settings'

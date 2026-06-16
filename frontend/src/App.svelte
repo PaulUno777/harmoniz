@@ -25,7 +25,12 @@
     OpenFolderDialog,
     ScanLibrary,
     ListTracks,
+    AnalyzeArtists,
+    DetectDuplicates,
   } from "../wailsjs/go/main/App.js";
+  import { analysis } from "./lib/stores/analysis";
+  import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
+  import CleanerView from "./lib/components/analysis/CleanerView.svelte";
 
   let activeTab = $state<TabId>("library");
   let selectedTrack = $state<Track | null>(null);
@@ -252,6 +257,27 @@
   );
 
   const hasMoreTracks = $derived(tracks.length < totalTrackCount);
+
+  const analysisLoadingStore = analysis.loading;
+
+  async function handleRunAnalysis() {
+    if (!currentLibraryPath) return;
+    analysis.setError(null);
+    analysis.setLoading(true);
+    try {
+      const [suggestions, duplicates] = await Promise.all([
+        AnalyzeArtists(currentLibraryPath),
+        DetectDuplicates(currentLibraryPath),
+      ]);
+      analysis.setArtistSuggestions((suggestions ?? []) as import("./lib/types").ArtistSuggestion[]);
+      analysis.setDuplicates((duplicates ?? []) as Track[][]);
+      analysis.setHasRunOnce(true);
+    } catch (e) {
+      analysis.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      analysis.setLoading(false);
+    }
+  }
 </script>
 
 <div
@@ -272,6 +298,9 @@
         onSearchChange={(query) => searchQuery = query}
         onFilterToggle={() => isFilterPanelOpen = !isFilterPanelOpen}
         {activeFilterCount}
+        onRunAnalysis={handleRunAnalysis}
+        analysisLoading={$analysisLoadingStore}
+        hasLibrary={!!currentLibraryPath}
       />
 
       <div
@@ -281,6 +310,10 @@
       >
         {#if activeTab === "settings"}
           <Settings />
+        {:else if activeTab === "organizer"}
+          <OrganizerView onBrowse={handleBrowse} />
+        {:else if activeTab === "cleaner"}
+          <CleanerView onBrowse={handleBrowse} />
         {:else if !currentLibraryPath}
           <EmptyState onBrowse={handleBrowse} />
         {:else}

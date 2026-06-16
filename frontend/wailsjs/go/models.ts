@@ -1,5 +1,25 @@
 export namespace domain {
 	
+	export class ArtistSuggestion {
+	    original: string;
+	    suggested: string;
+	    score: number;
+	    reason: string;
+	    confidence_level: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new ArtistSuggestion(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.original = source["original"];
+	        this.suggested = source["suggested"];
+	        this.score = source["score"];
+	        this.reason = source["reason"];
+	        this.confidence_level = source["confidence_level"];
+	    }
+	}
 	export class Track {
 	    id: number;
 	    path: string;

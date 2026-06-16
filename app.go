@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"harmoniz/internal/core/domain"
+	"harmoniz/internal/core/ports"
+	"harmoniz/internal/core/services/analysis"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
 	"time"
@@ -12,14 +14,18 @@ import (
 
 // App struct
 type App struct {
-	ctx     context.Context
-	scanner *scanner.Service
+	ctx        context.Context
+	scanner    *scanner.Service
+	clustering *analysis.ClusteringService
+	deduper    *analysis.DeduplicationService
 }
 
 // NewApp creates a new App application struct
-func NewApp(scannerService *scanner.Service) *App {
+func NewApp(scannerService *scanner.Service, repo ports.TrackRepository) *App {
 	return &App{
-		scanner: scannerService,
+		scanner:    scannerService,
+		clustering: analysis.NewClusteringService(repo),
+		deduper:    analysis.NewDeduplicationService(repo),
 	}
 }
 
@@ -90,4 +96,22 @@ func (a *App) ListTracks(
 	}
 	logger.Log.Info("ListTracks returned", "tracks", len(tracks), "total", total, "filter", filter)
 	return &domain.ListTracksResult{Tracks: tracks, Total: total}, nil
+}
+
+// AnalyzeArtists returns artist name clustering suggestions for the given library root.
+// root is the current library path; use "" to analyze all tracks in the database.
+func (a *App) AnalyzeArtists(root string) ([]domain.ArtistSuggestion, error) {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+	return a.clustering.AnalyzeArtists(a.ctx, root)
+}
+
+// DetectDuplicates returns groups of byte-identical tracks under the given root.
+// root is the current library path; use "" to scan the entire database.
+func (a *App) DetectDuplicates(root string) ([][]domain.Track, error) {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+	return a.deduper.DetectDuplicates(a.ctx, root)
 }

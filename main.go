@@ -54,8 +54,8 @@ func main() {
 	// Setup Services
 	scannerService := scanner.NewService(dbAdapter)
 
-	// Create an instance of the app structure
-	app := NewApp(scannerService)
+	// Create an instance of the app structure (dbAdapter implements ports.TrackRepository)
+	app := NewApp(scannerService, dbAdapter)
 
 	// Create application with options
 	err = wails.Run(&options.App{

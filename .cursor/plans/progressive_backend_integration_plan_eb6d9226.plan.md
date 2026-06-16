@@ -29,6 +29,18 @@ todos:
   - id: phase3-approval
     content: "Phase 3 Approval: Request user approval before proceeding to Phase 4"
     status: pending
+  - id: phase4-analysis
+    content: "Phase 4: Analysis (artist clustering + duplicate detection); Phase 4 UI: Organizer/Cleaner views for suggestions only"
+    status: completed
+  - id: phase5-organize
+    content: "Phase 5: Organize — Rename files, set artist/title/tags, organize library (separate from Analysis and Cleaner)"
+    status: pending
+  - id: phase6-cleaner
+    content: "Phase 6: Cleaner — Resolve duplicates, prune missing, empty folders (separate from Organize)"
+    status: pending
+  - id: phase7-transactions
+    content: "Phase 7: Transactions & Undo/Redo (optional, after Phase 5/6)"
+    status: pending
 isProject: false
 ---
 
@@ -36,18 +48,18 @@ isProject: false
 
 ## Current State
 
-- **Frontend**: Svelte 5 + TailwindCSS; library tab shows current path, browse/drag-drop, and a simple track grid (no virtual list or infinite scroll yet).
-- **Backend**: Wails app with DB, scanner, `ListTracks(root, limit, offset)`, `ScanLibrary` (with 24h staleness re-sync: if `added_at` is older than 24h, tracks for that root are deleted and re-scanned).
-- **Backup**: Full implementation in `context/harmoniz-backup/` with hexagonal architecture; reference for VirtualTable (`@tanstack/svelte-virtual`) and infinite-scroll approach.
+- **Frontend**: Svelte 5 + TailwindCSS; library tab shows current path, browse/drag-drop, virtual list + infinite scroll (Phase 3). **Phase 4 UI**: Organizer/Cleaner views for analysis (artist suggestions, duplicate groups) with Run analysis — in progress.
+- **Backend**: Wails app with DB, scanner, `ListTracks` (filtered), `ScanLibrary` (24h staleness re-sync), **Phase 4**: `AnalyzeArtists(root)`, `DetectDuplicates(root)`.
+- **Backup**: Full implementation in `context/harmoniz-backup/` with hexagonal architecture; reference for UI and services.
 
 ## Architecture Overview
 
 The backup follows **Hexagonal Architecture**:
 
 - **Domain**: Pure structs (`Track`, `Transaction`, `ArtistSuggestion`)
-- **Ports**: Interfaces (`TrackRepository`, `FileSystem`)
-- **Services**: Business logic (`Scanner`, `Rename`, `Cleaner`, `Analysis`)
-- **Adapters**: Implementations (`db/sqlite`, `fs`, `ui/app.go`)
+- **Ports**: Interfaces (`TrackRepository`, `FileSystem`, tag read/write)
+- **Services**: Business logic (`Scanner`, `Rename`, `Cleaner`, `Analysis`) — each **clearly separated** by feature (see Feature Separation below).
+- **Adapters**: Implementations (`db/sqlite`, `fs`, metadata/tag, `app.go`)
 
 ## Integration Phases
 
@@ -319,16 +331,78 @@ The backup follows **Hexagonal Architecture**:
 2. Stage 2 (RAM): Group by partial hash (already computed)
 3. Stage 3 (Disk): Compute full hash only for candidates
 
-**Reference**: See `PHASE4_PLAN.md` for detailed implementation plan and validation criteria.
+**Reference**: See `PHASE4_PLAN.md` for backend implementation; see `**PHASE4_UI_PLAN.md`** for UI/UX plan (analysis store, Organizer/Cleaner views, Run analysis, artist suggestion cards, duplicate group cards).
 
 ---
 
-### Phase 5+: Additional Features (Future)
+## Feature Separation (Scope Boundaries)
 
-- Rename service
-- Cleaner service
-- Transaction system
-- Undo/Redo functionality
+Features are **clearly separated** by purpose and scope. Do not mix their UI or backend responsibilities.
+
+
+| Feature          | Purpose                                                      | Scope                            | Phases     |
+| ---------------- | ------------------------------------------------------------ | -------------------------------- | ---------- |
+| **Library**      | Browse folder, scan files, list tracks for current path      | Read-only ingestion + display    | 1, 2, 3    |
+| **Analysis**     | Detect issues: similar artist names, duplicate files         | Read-only analysis; suggest only | 4          |
+| **Organize**     | Rename files, set artist/title/tags, organize entire library | Write: files + metadata + DB     | 5          |
+| **Cleaner**      | Resolve duplicates (delete), prune missing, empty folders    | Write: delete/prune actions      | 6 (future) |
+| **Transactions** | Undo/redo for batch operations                               | Audit trail, rollback            | 7 (future) |
+
+
+- **Organizer tab (UI)** in Phase 4 = **Analysis** (artist suggestions from clustering). It does **not** perform renames or tag writes.
+- **Organize feature (Phase 5)** = dedicated flow for **editing** metadata and **renaming/organizing** files; separate from analysis.
+
+---
+
+### Phase 5: Organize (Rename, Tag, Organize Library)
+
+**Goal**: Let users **rename files**, **set artist/title** (and other tags), and **organize the entire library** (e.g. folder structure by artist/album). This is a **write** feature, clearly separate from read-only Library and Analysis.
+
+**Scope (Phase 5 only)**:
+
+- **Rename files**: Apply template or manual rename; atomic rename (temp → final); update DB path.
+- **Edit tags**: Set artist, title, album, year, etc. (write to file via tag library + update DB).
+- **Organize library**: Option to move files into a structure (e.g. `Artist/Album/track.mp3`) based on metadata; same atomic rename + DB update.
+
+**Out of scope for Phase 5 (other phases)**:
+
+- **Analysis** (Phase 4): Only suggests; no file or tag writes.
+- **Cleaner** (Phase 6): Delete duplicates, prune missing files, clean empty folders.
+- **Transactions / Undo** (Phase 7): Record operations for rollback.
+
+**Backend (to add)**:
+
+- `internal/core/services/rename/` – Rename service (pre-calc targets, collision check, temp→final, UpdateTrackPath).
+- `internal/core/ports/metadata.go` or adapter – Tag **write** (e.g. `bogem/id3v2` for MP3); read already via scanner/tag.
+- `internal/adapters/ui/app.go` – Methods e.g. `RenameTrack(oldPath, newPath)`, `UpdateTrackTags(id, artist, title, album, …)`, `OrganizeLibrary(root, template)` (optional).
+- Repository: `UpdateTrackPath` already in ports; implement in DB adapter if not done.
+- **Transactions table** (optional in Phase 5): Store before-snapshots for undo; can be Phase 7.
+
+**Frontend (to add)**:
+
+- **Organize** flow clearly separate from **Organizer (analysis)** tab: e.g. “Edit track” in context panel or Library (inline edit / modal) for artist, title, album; “Rename” action; “Organize library” action (optional) in a dedicated section or Organize tab.
+- Do **not** reuse the “Organizer” tab for both analysis suggestions and rename/tag UI; use distinct entry points (e.g. Library + context panel for single-track edit; optional “Organize” tab or section for batch rename/organize).
+
+**Reference**: `context/PLAN.md` § D (Transactional Renaming & Editing); backup `internal/core/services/rename` (if present) and tag-write adapter.
+
+---
+
+### Phase 6: Cleaner (Resolve Duplicates, Prune, Empty Folders) — Future
+
+- **Resolve duplicates**: Delete chosen duplicate files; update DB (soft delete or remove row).
+- **Prune**: Mark tracks as deleted when file is missing on disk.
+- **Clean empty folders**: Remove empty directories under library root.
+- Clearly **separate** from Organize (Phase 5): Cleaner = delete/prune; Organize = rename/tag/structure.
+
+---
+
+### Phase 7: Transactions & Undo/Redo — Future
+
+- Record before-state for batch operations (rename, tag, organize, prune).
+- Undo/redo API and UI.
+- Separate from feature logic; can be added after Phase 5/6.
+
+---
 
 ## Implementation Strategy
 

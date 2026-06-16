@@ -4,6 +4,7 @@
     FunnelIcon,
     ListIcon,
     FolderIcon,
+    ChartBarIcon,
   } from "phosphor-svelte";
   import { t } from "../../stores/i18n";
   import type { TabId } from "../../types";
@@ -15,9 +16,17 @@
     onSearchChange: (query: string) => void;
     onFilterToggle: () => void;
     activeFilterCount: number;
+    onRunAnalysis?: () => void;
+    analysisLoading?: boolean;
+    hasLibrary?: boolean;
   }
 
-  let { activeTab, onBrowse, searchQuery, onSearchChange, onFilterToggle, activeFilterCount }: Props = $props();
+  let { activeTab, onBrowse, searchQuery, onSearchChange, onFilterToggle, activeFilterCount, onRunAnalysis, analysisLoading = false, hasLibrary = false }: Props = $props();
+
+  const showAnalyzeButton = $derived(
+    (activeTab === "organizer" || activeTab === "cleaner") &&
+    typeof onRunAnalysis === "function"
+  );
 </script>
 
 <header
@@ -37,6 +46,17 @@
         <FolderIcon size={16} />
         {$t('browse')}
       </button>
+      {#if showAnalyzeButton}
+        <button
+          onclick={onRunAnalysis}
+          disabled={!hasLibrary || analysisLoading}
+          class="px-4 py-1.5 bg-surface border border-border hover:bg-white/5 rounded-lg font-bold text-xs transition-all flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
+          title={$t('runAnalysis')}
+        >
+          <ChartBarIcon size={16} class={analysisLoading ? 'animate-pulse' : ''} />
+          {analysisLoading ? $t('analyzing') : $t('runAnalysis')}
+        </button>
+      {/if}
 
       <div class="relative flex-1 max-w-md group">
         <MagnifyingGlassIcon

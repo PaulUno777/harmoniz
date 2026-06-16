@@ -174,6 +174,40 @@ func (a *Adapter) ListTracks(ctx context.Context, filter domain.TrackFilter) ([]
 	return tracks, total, nil
 }
 
+// scanTracks scans rows (SELECT id, path, filename, size, mod_time, added_at, artist_raw, artist_norm, album_raw, album_norm, title, year, track_num, bitrate, hash_partial, hash_full, fingerprint, is_deleted, deleted_at, delete_reason, status) into []domain.Track.
+func scanTracks(rows *sql.Rows) ([]domain.Track, error) {
+	var tracks []domain.Track
+	for rows.Next() {
+		var t domain.Track
+		var bitrate sql.NullInt64
+		var hashFull, fingerprint, deleteReason sql.NullString
+		if err := rows.Scan(
+			&t.ID, &t.Path, &t.Filename, &t.Size, &t.ModTime, &t.AddedAt,
+			&t.ArtistRaw, &t.ArtistNorm, &t.AlbumRaw, &t.AlbumNorm, &t.Title, &t.Year, &t.TrackNum, &bitrate,
+			&t.HashPartial, &hashFull, &fingerprint, &t.IsDeleted, &t.DeletedAt, &deleteReason, &t.Status,
+		); err != nil {
+			return nil, err
+		}
+		if bitrate.Valid {
+			t.Bitrate = int(bitrate.Int64)
+		}
+		if hashFull.Valid {
+			t.HashFull = hashFull.String
+		}
+		if fingerprint.Valid {
+			t.Fingerprint = fingerprint.String
+		}
+		if deleteReason.Valid {
+			t.DeleteReason = deleteReason.String
+		}
+		tracks = append(tracks, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return tracks, nil
+}
+
 // LatestAddedAtForRoot returns the most recent added_at (Unix) for tracks under root. Returns 0 if none.
 func (a *Adapter) LatestAddedAtForRoot(ctx context.Context, root string) (int64, error) {
 	normalized := strings.TrimRight(filepath.Clean(root), "/\\")
@@ -190,13 +224,71 @@ func (a *Adapter) DeleteTracksForRoot(ctx context.Context, root string) error {
 	return err
 }
 
-// Stub implementations for Phase 2 - will be implemented in later phases
-func (a *Adapter) GetDuplicateCandidates() ([]domain.Track, error) {
-	return nil, nil
+// GetDuplicateCandidates returns tracks that share the same file size (potential duplicates).
+// root restricts to tracks under that path; empty means all non-deleted tracks.
+func (a *Adapter) GetDuplicateCandidates(ctx context.Context, root string) ([]domain.Track, error) {
+	conditions := []string{"is_deleted = 0"}
+	args := []interface{}{}
+	if root != "" {
+		normalized := strings.TrimRight(filepath.Clean(root), "/\\")
+		conditions = append(conditions, "(path = ? OR path LIKE ?)")
+		args = append(args, normalized, normalized+"/%")
+	}
+	where := "WHERE " + strings.Join(conditions, " AND ")
+	// Subquery: sizes that appear more than once. Outer: all tracks with those sizes (same filter).
+	query := `
+		SELECT t1.id, t1.path, t1.filename, t1.size, t1.mod_time, t1.added_at,
+		       t1.artist_raw, t1.artist_norm, t1.album_raw, t1.album_norm, t1.title, t1.year, t1.track_num, t1.bitrate,
+		       t1.hash_partial, t1.hash_full, t1.fingerprint, t1.is_deleted, t1.deleted_at, t1.delete_reason, t1.status
+		FROM tracks t1
+		INNER JOIN (
+			SELECT size FROM tracks ` + where + ` GROUP BY size HAVING COUNT(*) > 1
+		) t2 ON t1.size = t2.size
+		` + where + `
+		ORDER BY t1.size DESC, t1.id
+	`
+	// Same args for subquery and outer WHERE
+	allArgs := append(append([]interface{}{}, args...), args...)
+	rows, err := a.Conn.QueryContext(ctx, query, allArgs...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanTracks(rows)
 }
 
-func (a *Adapter) StreamUniqueArtists(ctx context.Context) (<-chan string, error) {
-	return nil, nil
+// StreamUniqueArtists streams distinct artist_norm for non-deleted tracks.
+// root restricts to tracks under that path; empty means all.
+func (a *Adapter) StreamUniqueArtists(ctx context.Context, root string) (<-chan string, error) {
+	conditions := []string{"is_deleted = 0", "COALESCE(TRIM(artist_norm), '') != ''"}
+	args := []interface{}{}
+	if root != "" {
+		normalized := strings.TrimRight(filepath.Clean(root), "/\\")
+		conditions = append(conditions, "(path = ? OR path LIKE ?)")
+		args = append(args, normalized, normalized+"/%")
+	}
+	query := `SELECT DISTINCT artist_norm FROM tracks WHERE ` + strings.Join(conditions, " AND ")
+	rows, err := a.Conn.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	ch := make(chan string, 64)
+	go func() {
+		defer rows.Close()
+		defer close(ch)
+		for rows.Next() {
+			var artist string
+			if err := rows.Scan(&artist); err != nil {
+				return
+			}
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- artist:
+			}
+		}
+	}()
+	return ch, nil
 }
 
 func (a *Adapter) UpdateTrackPath(ctx context.Context, id uint64, newPath string) error {
