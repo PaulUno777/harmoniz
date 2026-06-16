@@ -6,7 +6,7 @@
     CheckCircleIcon, EyeIcon, XIcon,
   } from 'phosphor-svelte'
   // @ts-ignore
-  import { AnalyzeForOrganize, PreviewFilenameTemplate } from '../../../../wailsjs/go/main/App.js'
+  import { AnalyzeForOrganize, PreviewFilenameTemplate, ApplyAllHighConfidence } from '../../../../wailsjs/go/main/App.js'
   import { organizer } from '../../stores/organizer'
   import { toast } from '../../stores/toast'
   import { t } from '../../stores/i18n'
@@ -17,18 +17,21 @@
   export let onBrowse: () => void
 
   // Store refs
-  const status           = organizer.status
-  const suggestions      = organizer.suggestions
-  const withSuggestions  = organizer.withSuggestions
-  const filenamePreviews = organizer.filenamePreviews
-  const filenameTemplate = organizer.filenameTemplate
-  const selectedTrackId  = organizer.selectedTrackId
+  const status              = organizer.status
+  const suggestions         = organizer.suggestions
+  const withSuggestions     = organizer.withSuggestions
+  const filenamePreviews    = organizer.filenamePreviews
+  const filenameTemplate    = organizer.filenameTemplate
+  const selectedTrackId     = organizer.selectedTrackId
+  const highConfidenceCount = organizer.highConfidenceCount
 
   // Local state
   let showAll          = false
   let showPreviewPanel = false
   let mounted          = false
   let lastAnalyzedPath = ''
+  let groupByArtist    = false
+  let expandedArtists  = new Set<string>()
 
   // i18n
   let tr: (key: any) => string = (key: any) => String(key)
@@ -51,6 +54,32 @@
   }
 
   $: displayList = showAll ? $suggestions : $withSuggestions
+
+  type ArtistGroup = { artist: string; items: typeof displayList }
+  let artistGroups: ArtistGroup[] | null = null
+  $: artistGroups = groupByArtist
+    ? displayList.reduce((acc: ArtistGroup[], s) => {
+        const name = (s.fields['artist']?.value || s.track.artist_raw || '—') as string
+        let g = acc.find(g => g.artist === name)
+        if (!g) { g = { artist: name, items: [] }; acc.push(g) }
+        g.items.push(s)
+        return acc
+      }, [])
+    : null
+
+  // Ensure newly seen artists start expanded
+  $: if (artistGroups) {
+    artistGroups.forEach(g => { if (!expandedArtists.has(g.artist)) expandedArtists.add(g.artist) })
+  }
+
+  function toggleArtistGroup(artist: string) {
+    expandedArtists = new Set(expandedArtists)
+    if (expandedArtists.has(artist)) {
+      expandedArtists.delete(artist)
+    } else {
+      expandedArtists.add(artist)
+    }
+  }
 
   async function handleAnalyze() {
     if (!libraryPath) return
@@ -77,6 +106,20 @@
     }
   }
 
+  async function handleApplyAll() {
+    if (!libraryPath || get(status) === 'applying') return
+    organizer.startApplying()
+    try {
+      const count: number = await ApplyAllHighConfidence(libraryPath, 0.75, get(filenameTemplate))
+      organizer.setApplied(count)
+      toast.success(`Applied ${count} suggestion${count !== 1 ? 's' : ''}`)
+      await handleAnalyze()
+    } catch (e) {
+      toast.error(`Batch apply failed: ${e}`)
+      organizer.setError(e instanceof Error ? e.message : String(e))
+    }
+  }
+
   function scoreColor(score: number): string {
     if (score >= 75) return 'bg-green-500'
     if (score >= 50) return 'bg-yellow-500'
@@ -93,10 +136,28 @@
     <div class="flex items-center gap-3">
       <p class="text-xs text-text-muted flex-1">{tr('organizerDescription')}</p>
       <div class="flex items-center gap-2 shrink-0">
-        {#if $status === 'ready'}
+        {#if $status === 'ready' || $status === 'applying'}
+          <!-- Apply All (shown when high-confidence suggestions exist) -->
+          {#if $highConfidenceCount > 0}
+            <button
+              on:click={handleApplyAll}
+              disabled={$status === 'applying' || !libraryPath}
+              class="px-3 py-1.5 text-xs font-bold rounded-lg bg-accent/15 text-accent border border-accent/25
+                     flex items-center gap-1.5 hover:bg-accent/25 transition-colors disabled:opacity-40"
+            >
+              {#if $status === 'applying'}
+                <SpinnerIcon size={12} class="animate-spin" />
+                Applying…
+              {:else}
+                <CheckCircleIcon size={12} />
+                Apply all ({$highConfidenceCount})
+              {/if}
+            </button>
+          {/if}
+          <!-- Re-analyze -->
           <button
             on:click={handleAnalyze}
-            disabled={!libraryPath}
+            disabled={!libraryPath || $status === 'applying'}
             class="px-3 py-1.5 text-xs font-semibold rounded-lg border border-border hover:bg-white/5
                    text-text-secondary flex items-center gap-1.5 transition-colors disabled:opacity-40"
           >
@@ -182,6 +243,12 @@
           >
             All
           </button>
+          <button
+            on:click={() => { groupByArtist = !groupByArtist }}
+            class="px-2 py-1 border-l border-border transition-colors {groupByArtist ? 'bg-accent/20 text-accent' : 'text-text-muted hover:bg-white/5'}"
+          >
+            By artist
+          </button>
         </div>
       </div>
     {/if}
@@ -234,7 +301,7 @@
           <p class="text-[10px] font-mono text-text-muted/50 max-w-xs truncate">{libraryPath}</p>
         </div>
 
-      {:else if $status === 'ready' && $withSuggestions.length === 0 && !showAll}
+      {:else if ($status === 'ready' || $status === 'applying') && $withSuggestions.length === 0 && !showAll}
         <div class="flex flex-col items-center justify-center h-full gap-4 text-center px-8">
           <CheckCircleIcon size={36} class="text-green-400/70" weight="thin" />
           <p class="text-sm text-text-secondary font-medium">{tr('noSuggestionsFound')}</p>
@@ -244,66 +311,120 @@
           </button>
         </div>
 
-      {:else}
+      {:else if $status === 'ready' || $status === 'applying'}
         <!-- Track list — full width, click sets selected in store -->
         <div class="py-2">
-          {#each displayList as sugg (sugg.track_id)}
-            {@const hasFields = Object.keys(sugg.fields).length > 0}
-            {@const isSelected = $selectedTrackId === sugg.track_id}
-
-            <button
-              type="button"
-              on:click={() => organizer.setSelectedTrack(isSelected ? null : sugg.track_id)}
-              class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all
-                     hover:bg-surface/50
-                     {isSelected ? 'bg-surface border-l-2 border-l-accent' : 'border-l-2 border-l-transparent'}"
-            >
-              <!-- Score dot -->
-              <div class="w-2 h-2 rounded-full shrink-0 {scoreColor(sugg.score)}"></div>
-
-              <!-- Track info: current → suggestion -->
-              <div class="flex-1 min-w-0">
-                {#if sugg.fields['title']}
-                  <div class="text-xs font-semibold text-accent truncate leading-tight">
-                    {sugg.fields['title'].value}
-                  </div>
-                  <div class="text-[9px] text-text-muted/40 line-through truncate leading-tight">
-                    {sugg.track.title || sugg.track.filename}
-                  </div>
-                {:else}
-                  <div class="text-xs font-semibold text-text-primary truncate leading-tight">
-                    {sugg.track.title || sugg.track.filename}
-                  </div>
-                {/if}
-
-                {#if sugg.fields['artist']}
-                  <div class="flex items-center gap-1 mt-0.5 min-w-0">
-                    <span class="text-[9px] text-text-muted/40 line-through truncate shrink min-w-0 max-w-[40%]">
-                      {sugg.track.artist_raw || '—'}
-                    </span>
-                    <span class="text-[9px] text-text-muted/30 shrink-0">→</span>
-                    <span class="text-[9px] text-accent font-medium truncate shrink min-w-0">
-                      {sugg.fields['artist'].value}
-                    </span>
-                  </div>
-                {:else}
-                  <div class="text-[10px] text-text-muted truncate mt-0.5">
-                    {sugg.track.artist_raw || '—'}
-                  </div>
-                {/if}
-              </div>
-
-              <!-- Score / complete -->
-              {#if hasFields}
-                <span class="shrink-0 text-[9px] font-bold tabular-nums
-                             {sugg.score >= 75 ? 'text-green-400' : 'text-yellow-400'}">
-                  {Math.round(sugg.score)}%
-                </span>
-              {:else}
-                <CheckCircleIcon size={12} class="text-green-400/60 shrink-0" />
+          {#if artistGroups}
+            <!-- Grouped by artist view -->
+            {#each artistGroups as group}
+              <button
+                type="button"
+                on:click={() => toggleArtistGroup(group.artist)}
+                class="w-full flex items-center gap-2 px-4 py-1.5 text-left bg-surface/30
+                       border-b border-t border-border/30 hover:bg-white/5 transition-colors sticky top-0 z-10"
+              >
+                <span class="text-[10px] font-bold uppercase tracking-wider text-text-muted">{group.artist}</span>
+                <span class="text-[9px] text-text-muted/40">({group.items.length})</span>
+                <span class="ml-auto text-[9px] text-text-muted/30">{expandedArtists.has(group.artist) ? '▾' : '▸'}</span>
+              </button>
+              {#if expandedArtists.has(group.artist)}
+                {#each group.items as sugg (sugg.track_id)}
+                  {@const hasFields = Object.keys(sugg.fields).length > 0}
+                  {@const isSelected = $selectedTrackId === sugg.track_id}
+                  <button
+                    type="button"
+                    on:click={() => organizer.setSelectedTrack(isSelected ? null : sugg.track_id)}
+                    class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all
+                           hover:bg-surface/50
+                           {isSelected ? 'bg-surface border-l-2 border-l-accent' : 'border-l-2 border-l-transparent'}"
+                  >
+                    <div class="w-2 h-2 rounded-full shrink-0 {scoreColor(sugg.score)}"></div>
+                    <div class="flex-1 min-w-0">
+                      {#if sugg.fields['title']}
+                        <div class="text-xs font-semibold text-accent truncate leading-tight">{sugg.fields['title'].value}</div>
+                        <div class="text-[9px] text-text-muted/40 line-through truncate leading-tight">{sugg.track.title || sugg.track.filename}</div>
+                      {:else}
+                        <div class="text-xs font-semibold text-text-primary truncate leading-tight">{sugg.track.title || sugg.track.filename}</div>
+                      {/if}
+                      {#if sugg.fields['artist']}
+                        <div class="flex items-center gap-1 mt-0.5 min-w-0">
+                          <span class="text-[9px] text-text-muted/40 line-through truncate shrink min-w-0 max-w-[40%]">{sugg.track.artist_raw || '—'}</span>
+                          <span class="text-[9px] text-text-muted/30 shrink-0">→</span>
+                          <span class="text-[9px] text-accent font-medium truncate shrink min-w-0">{sugg.fields['artist'].value}</span>
+                        </div>
+                      {:else}
+                        <div class="text-[10px] text-text-muted truncate mt-0.5">{sugg.track.artist_raw || '—'}</div>
+                      {/if}
+                    </div>
+                    {#if hasFields}
+                      <span class="shrink-0 text-[9px] font-bold tabular-nums {sugg.score >= 75 ? 'text-green-400' : 'text-yellow-400'}">{Math.round(sugg.score)}%</span>
+                    {:else}
+                      <CheckCircleIcon size={12} class="text-green-400/60 shrink-0" />
+                    {/if}
+                  </button>
+                {/each}
               {/if}
-            </button>
-          {/each}
+            {/each}
+          {:else}
+            <!-- Flat list (default) -->
+            {#each displayList as sugg (sugg.track_id)}
+              {@const hasFields = Object.keys(sugg.fields).length > 0}
+              {@const isSelected = $selectedTrackId === sugg.track_id}
+
+              <button
+                type="button"
+                on:click={() => organizer.setSelectedTrack(isSelected ? null : sugg.track_id)}
+                class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all
+                       hover:bg-surface/50
+                       {isSelected ? 'bg-surface border-l-2 border-l-accent' : 'border-l-2 border-l-transparent'}"
+              >
+                <!-- Score dot -->
+                <div class="w-2 h-2 rounded-full shrink-0 {scoreColor(sugg.score)}"></div>
+
+                <!-- Track info: current → suggestion -->
+                <div class="flex-1 min-w-0">
+                  {#if sugg.fields['title']}
+                    <div class="text-xs font-semibold text-accent truncate leading-tight">
+                      {sugg.fields['title'].value}
+                    </div>
+                    <div class="text-[9px] text-text-muted/40 line-through truncate leading-tight">
+                      {sugg.track.title || sugg.track.filename}
+                    </div>
+                  {:else}
+                    <div class="text-xs font-semibold text-text-primary truncate leading-tight">
+                      {sugg.track.title || sugg.track.filename}
+                    </div>
+                  {/if}
+
+                  {#if sugg.fields['artist']}
+                    <div class="flex items-center gap-1 mt-0.5 min-w-0">
+                      <span class="text-[9px] text-text-muted/40 line-through truncate shrink min-w-0 max-w-[40%]">
+                        {sugg.track.artist_raw || '—'}
+                      </span>
+                      <span class="text-[9px] text-text-muted/30 shrink-0">→</span>
+                      <span class="text-[9px] text-accent font-medium truncate shrink min-w-0">
+                        {sugg.fields['artist'].value}
+                      </span>
+                    </div>
+                  {:else}
+                    <div class="text-[10px] text-text-muted truncate mt-0.5">
+                      {sugg.track.artist_raw || '—'}
+                    </div>
+                  {/if}
+                </div>
+
+                <!-- Score / complete -->
+                {#if hasFields}
+                  <span class="shrink-0 text-[9px] font-bold tabular-nums
+                               {sugg.score >= 75 ? 'text-green-400' : 'text-yellow-400'}">
+                    {Math.round(sugg.score)}%
+                  </span>
+                {:else}
+                  <CheckCircleIcon size={12} class="text-green-400/60 shrink-0" />
+                {/if}
+              </button>
+            {/each}
+          {/if}
         </div>
       {/if}
 

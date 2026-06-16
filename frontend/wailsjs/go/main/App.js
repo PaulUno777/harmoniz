@@ -18,6 +18,10 @@ export function ApplyOrganizerSuggestion(arg1, arg2, arg3, arg4, arg5, arg6, arg
   return window['go']['main']['App']['ApplyOrganizerSuggestion'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
+export function DeleteTrack(arg1) {
+  return window['go']['main']['App']['DeleteTrack'](arg1);
+}
+
 export function DetectDuplicates(arg1) {
   return window['go']['main']['App']['DetectDuplicates'](arg1);
 }

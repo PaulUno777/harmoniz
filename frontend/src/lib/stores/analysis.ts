@@ -30,6 +30,16 @@ export const analysis = {
   setError(msg: string | null) {
     error.set(msg);
   },
+  removeFromGroup(trackId: number) {
+    duplicateGroups.update(groups =>
+      groups
+        .map(g => g.filter(t => t.id !== trackId))
+        .filter(g => g.length > 1)
+    );
+  },
+  resolveGroup(firstTrackPath: string) {
+    duplicateGroups.update(groups => groups.filter(g => g[0]?.path !== firstTrackPath));
+  },
   reset() {
     duplicateGroups.set([]);
     artistSuggestions.set([]);

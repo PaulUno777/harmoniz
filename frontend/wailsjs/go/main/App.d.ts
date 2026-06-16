@@ -10,6 +10,8 @@ export function ApplyAllHighConfidence(arg1:string,arg2:number,arg3:string):Prom
 
 export function ApplyOrganizerSuggestion(arg1:number,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number,arg7:string,arg8:string):Promise<string>;
 
+export function DeleteTrack(arg1:number):Promise<void>;
+
 export function DetectDuplicates(arg1:string):Promise<Array<any>>;
 
 export function ListTracks(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:number):Promise<domain.ListTracksResult>;

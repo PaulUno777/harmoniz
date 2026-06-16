@@ -8,6 +8,8 @@
     SpeakerHighIcon,
     SpeakerXIcon,
     FileAudioIcon,
+    RepeatIcon,
+    ShuffleIcon,
   } from "phosphor-svelte";
   import { playbackStore } from "../../stores/playback";
   import { formatTime } from "../../utils/format";
@@ -27,6 +29,8 @@
     duration: number;
     volume: number;
     isMuted: boolean;
+    loopMode: 'none' | 'one' | 'all';
+    shuffleMode: boolean;
   };
 
   let playbackState = $state<PlaybackSnapshot>({
@@ -36,6 +40,8 @@
     duration: 0,
     volume: 1,
     isMuted: false,
+    loopMode: 'none',
+    shuffleMode: false,
   });
 
   let isDraggingProgress = $state(false);
@@ -51,6 +57,8 @@
         duration: state.duration,
         volume: state.volume,
         isMuted: state.isMuted,
+        loopMode: state.loopMode,
+        shuffleMode: state.shuffleMode,
       };
     });
   });
@@ -189,6 +197,15 @@
             class="w-[min(520px,100%)] flex flex-col items-center gap-2 min-w-0 justify-self-center"
           >
             <div class="flex items-center gap-2">
+              <!-- Shuffle -->
+              <button
+                onclick={() => playbackStore.toggleShuffle()}
+                class="p-2 rounded-lg transition-all {playbackState.shuffleMode ? 'text-accent' : 'text-text-secondary hover:text-accent hover:bg-white/5'}"
+                title={playbackState.shuffleMode ? "Shuffle on" : "Shuffle off"}
+              >
+                <ShuffleIcon size={16} />
+              </button>
+
               <button
                 onclick={handlePrevious}
                 class="p-2 hover:bg-white/5 rounded-lg text-text-secondary hover:text-accent transition-all"
@@ -215,6 +232,18 @@
                 title="Next track"
               >
                 <SkipForwardIcon size={20} weight="fill" />
+              </button>
+
+              <!-- Loop -->
+              <button
+                onclick={() => playbackStore.cycleLoop()}
+                class="p-2 rounded-lg transition-all relative {playbackState.loopMode !== 'none' ? 'text-accent' : 'text-text-secondary hover:text-accent hover:bg-white/5'}"
+                title={playbackState.loopMode === 'one' ? 'Loop one' : playbackState.loopMode === 'all' ? 'Loop all' : 'No loop'}
+              >
+                <RepeatIcon size={16} />
+                {#if playbackState.loopMode === 'one'}
+                  <span class="absolute -top-0.5 -right-0.5 text-[8px] font-black leading-none text-accent">1</span>
+                {/if}
               </button>
             </div>
 

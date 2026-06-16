@@ -49,6 +49,15 @@
     onDestroy(() => window.removeEventListener("keydown", handleKeyPress));
   });
 
+  let virtualList: any = $state(null);
+
+  // Scroll to the selected track when it changes (only if off-screen).
+  $effect(() => {
+    if (!selectedTrack || !virtualList || tracks.length === 0) return;
+    const idx = tracks.findIndex(t => t.path === selectedTrack.path);
+    if (idx >= 0) virtualList.scroll({ index: idx, align: 'nearest', smoothScroll: true });
+  });
+
   // Estimated item height (matches ROW_HEIGHT from previous implementation)
   const ESTIMATED_ITEM_HEIGHT = 85;
 
@@ -106,6 +115,7 @@
   {:else if tracks.length > 0}
     <!-- Virtual List Container -->
     <VirtualList
+      bind:this={virtualList}
       items={tracks}
       defaultEstimatedItemHeight={ESTIMATED_ITEM_HEIGHT}
       bufferSize={10}

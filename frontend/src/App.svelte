@@ -28,9 +28,11 @@
     ListTracks,
     AnalyzeArtists,
     DetectDuplicates,
+    DeleteTrack,
   } from "../wailsjs/go/main/App.js";
   import { analysis } from "./lib/stores/analysis";
   import { organizer } from "./lib/stores/organizer";
+  import { playbackStore } from "./lib/stores/playback";
   import { toast } from "./lib/stores/toast";
 
   // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
@@ -291,6 +293,34 @@
     }
   }
 
+  // Reload tracks whenever we switch back to the library tab so organizer/cleaner
+  // edits (renames, deletes) are reflected immediately.
+  $effect(() => {
+    if (activeTab === 'library' && currentLibraryPath) {
+      currentOffset = 0;
+      tracks = [];
+      loadInitialTracks();
+    }
+  });
+
+  // Sync selectedTrack with playback when prev/next is used while on the library tab.
+  // The VirtualList scroll-to-selected effect in LibraryContent fires automatically.
+  $effect(() => {
+    const unsub = playbackStore.subscribe(state => {
+      if (activeTab !== 'library' || !state.currentTrack) return
+      if (state.currentTrack.path !== selectedTrack?.path) {
+        const match = tracks.find(t => t.path === state.currentTrack!.path)
+        if (match) selectedTrack = match
+      }
+    })
+    return () => unsub()
+  })
+
+  async function handleDeleteTrack(id: number) {
+    await DeleteTrack(id);
+    analysis.removeFromGroup(id);
+  }
+
   async function handleRunAnalysis() {
     if (!currentLibraryPath) return;
     analysis.setError(null);
@@ -344,7 +374,11 @@
         {:else if activeTab === "organizer"}
           <OrganizerView libraryPath={currentLibraryPath} onBrowse={handleBrowse} />
         {:else if activeTab === "cleaner"}
-          <CleanerView onBrowse={handleBrowse} />
+          <CleanerView
+            onBrowse={handleBrowse}
+            libraryPath={currentLibraryPath}
+            onDeleteTrack={handleDeleteTrack}
+          />
         {:else if !currentLibraryPath}
           <EmptyState onBrowse={handleBrowse} />
         {:else}

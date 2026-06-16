@@ -9,6 +9,8 @@ import (
 	"harmoniz/internal/core/services/organize"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -181,6 +183,29 @@ func (a *App) RenameTrack(id uint64, newFilename string) (string, error) {
 	}
 
 	return a.renamer.RenameTrack(a.ctx, tracks[0], newFilename)
+}
+
+// DeleteTrack removes a confirmed duplicate from disk (via macOS Trash when possible,
+// falling back to hard delete) and soft-deletes it in the database.
+func (a *App) DeleteTrack(id uint64) error {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+	tracks, err := a.repo.GetTracks(a.ctx, []uint64{id})
+	if err != nil || len(tracks) == 0 {
+		return fmt.Errorf("track %d not found", id)
+	}
+	track := tracks[0]
+
+	// Try macOS Trash first (recoverable); fall back to hard delete.
+	trashCmd := exec.Command("osascript", "-e",
+		fmt.Sprintf(`tell application "Finder" to delete POSIX file %q`, track.Path))
+	if trashErr := trashCmd.Run(); trashErr != nil {
+		if removeErr := os.Remove(track.Path); removeErr != nil && !os.IsNotExist(removeErr) {
+			return fmt.Errorf("delete failed: %w", removeErr)
+		}
+	}
+	return a.repo.SoftDelete(a.ctx, track.ID, "USER_DUPLICATE")
 }
 
 // AnalyzeForOrganize analyzes all tracks under root and returns per-track metadata suggestions.
