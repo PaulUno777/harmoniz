@@ -21,6 +21,7 @@
 
   let applying = false;
 
+  let fieldLabels: Record<string, string> = {};
   $: fieldLabels = {
     artist: $t("artist"),
     album: $t("album"),

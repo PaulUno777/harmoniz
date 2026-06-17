@@ -142,6 +142,7 @@
     return "text-text-muted";
   }
 
+  let fieldLabels: Record<string, string> = {};
   $: fieldLabels = {
     artist: tr("artist"),
     title: tr("title"),

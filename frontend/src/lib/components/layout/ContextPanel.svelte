@@ -85,7 +85,8 @@
     isRenaming = true
     try {
       const newPath = await RenameTrack(selectedTrack.id, editFilename.trim())
-      const newFilename = newPath.split('/').at(-1) ?? editFilename.trim()
+      const pathParts = newPath.split('/')
+      const newFilename = pathParts.length > 0 ? (pathParts[pathParts.length - 1] ?? editFilename.trim()) : editFilename.trim()
       const updated: Track = {
         ...selectedTrack,
         path:     newPath,

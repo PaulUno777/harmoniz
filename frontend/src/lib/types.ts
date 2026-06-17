@@ -29,7 +29,8 @@ export interface ArtistSuggestion {
 export interface FieldSuggestion {
   value: string
   confidence: number  // 0.0–1.0
-  source: 'path' | 'filename' | 'neighbor'
+  // Backend models come from Wails bindings where this may be a plain string.
+  source: 'path' | 'filename' | 'neighbor' | string
 }
 
 /** Phase 5b organizer: all suggestions for a single track */
