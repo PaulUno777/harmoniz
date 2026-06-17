@@ -34,6 +34,7 @@
   import { organizer } from "./lib/stores/organizer";
   import { playbackStore } from "./lib/stores/playback";
   import { toast } from "./lib/stores/toast";
+  import { updateStore } from "./lib/stores/update";
   import {
     loadSession,
     debouncedSaveSession,
@@ -194,9 +195,21 @@
     updateWindowTitle(currentLibraryPath);
   });
 
+  async function runStartupUpdateCheck() {
+    await updateStore.init();
+    await updateStore.check(true);
+    if (updateStore.isDismissed()) return;
+    const u = get(updateStore);
+    if (u.updateAvailable && u.latestVersion) {
+      toast.warning(
+        get(t)("updateAvailable").replace("{version}", u.latestVersion),
+      );
+    }
+  }
+
   onMount(() => {
     theme.init();
-    void restoreSession();
+    void restoreSession().then(() => runStartupUpdateCheck());
 
     window.addEventListener("beforeunload", handleBeforeUnload);
 

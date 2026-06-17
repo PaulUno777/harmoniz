@@ -4,7 +4,6 @@
     FunnelIcon,
     ListIcon,
     FolderIcon,
-    ChartBarIcon,
   } from "phosphor-svelte";
   import { t } from "../../stores/i18n";
   import type { TabId } from "../../types";
@@ -21,14 +20,14 @@
     hasLibrary?: boolean;
   }
 
-  let { activeTab, onBrowse, searchQuery, onSearchChange, onFilterToggle, activeFilterCount, onRunAnalysis, analysisLoading = false, hasLibrary = false }: Props = $props();
-
-  // "Run analysis" button is only shown for the cleaner tab (duplicate detection).
-  // The organizer tab manages its own analysis workflow internally.
-  const showAnalyzeButton = $derived(
-    activeTab === "cleaner" &&
-    typeof onRunAnalysis === "function"
-  );
+  let {
+    activeTab,
+    onBrowse,
+    searchQuery,
+    onSearchChange,
+    onFilterToggle,
+    activeFilterCount,
+  }: Props = $props();
 </script>
 
 <header
@@ -46,19 +45,8 @@
         class="px-4 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg font-bold text-xs transition-all flex items-center gap-2 group whitespace-nowrap"
       >
         <FolderIcon size={16} />
-        {$t('browse')}
+        {$t("browse")}
       </button>
-      {#if showAnalyzeButton}
-        <button
-          onclick={onRunAnalysis}
-          disabled={!hasLibrary || analysisLoading}
-          class="px-4 py-1.5 bg-surface border border-border hover:bg-white/5 rounded-lg font-bold text-xs transition-all flex items-center gap-2 disabled:opacity-50 whitespace-nowrap"
-          title={$t('runAnalysis')}
-        >
-          <ChartBarIcon size={16} class={analysisLoading ? 'animate-pulse' : ''} />
-          {analysisLoading ? $t('analyzing') : $t('runAnalysis')}
-        </button>
-      {/if}
 
       <div class="relative flex-1 max-w-md group">
         <MagnifyingGlassIcon
@@ -68,8 +56,8 @@
         <input
           type="text"
           value={searchQuery}
-          oninput={(e) => onSearchChange((e.target as HTMLInputElement).value)} 
-          placeholder={$t('search')}
+          oninput={(e) => onSearchChange((e.target as HTMLInputElement).value)}
+          placeholder={$t("search")}
           class="w-full bg-surface border border-border rounded-full py-2 pl-10 pr-4 outline-none focus:ring-1 focus:ring-accent transition-all"
         />
       </div>
@@ -80,18 +68,20 @@
     <button
       onclick={onFilterToggle}
       class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors relative"
-      title={$t('filter')}
+      title={$t("filter")}
     >
       <FunnelIcon size={20} />
       {#if activeFilterCount > 0}
-        <span class="absolute -top-1 -right-1 bg-accent text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center">
+        <span
+          class="absolute -top-1 -right-1 bg-accent text-white text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+        >
           {activeFilterCount}
         </span>
       {/if}
     </button>
     <button
       class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors"
-      title={$t('viewOptions')}
+      title={$t("viewOptions")}
     >
       <ListIcon size={20} />
     </button>

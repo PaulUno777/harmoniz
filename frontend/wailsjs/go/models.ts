@@ -252,3 +252,28 @@ export namespace domain {
 
 }
 
+export namespace update {
+	
+	export class Result {
+	    currentVersion: string;
+	    latestVersion: string;
+	    updateAvailable: boolean;
+	    releasePageUrl: string;
+	    downloadUrl: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new Result(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.currentVersion = source["currentVersion"];
+	        this.latestVersion = source["latestVersion"];
+	        this.updateAvailable = source["updateAvailable"];
+	        this.releasePageUrl = source["releasePageUrl"];
+	        this.downloadUrl = source["downloadUrl"];
+	    }
+	}
+
+}
+

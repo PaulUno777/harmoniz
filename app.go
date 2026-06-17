@@ -9,6 +9,8 @@ import (
 	"harmoniz/internal/core/services/organize"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
+	"harmoniz/internal/update"
+	"harmoniz/internal/version"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -501,4 +503,14 @@ func (a *App) OpenDebugFolder() {
 	dir := filepath.Join(home, ".harmoniz", "debug")
 	_ = os.MkdirAll(dir, 0o755)
 	_ = exec.Command("open", dir).Start()
+}
+
+// GetAppVersion returns the running app version (semver without "v" prefix).
+func (a *App) GetAppVersion() string {
+	return version.Version
+}
+
+// CheckForUpdates queries GitHub for the latest release and compares versions.
+func (a *App) CheckForUpdates() (update.Result, error) {
+	return update.Check()
 }

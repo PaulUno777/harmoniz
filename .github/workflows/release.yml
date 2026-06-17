@@ -35,6 +35,7 @@ jobs:
         shell: bash
         run: |
           VERSION="${GITHUB_REF#refs/tags/v}"
+          echo "VERSION=${VERSION}" >> "$GITHUB_ENV"
           jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > wails.json.tmp && mv wails.json.tmp wails.json
 
       - name: Setup Go
@@ -67,19 +68,19 @@ jobs:
         if: matrix.os == 'macos-latest'
         shell: bash
         run: |
-          wails build -platform darwin/universal -o harmoniz
+          wails build -platform darwin/universal -o harmoniz -ldflags "-X harmoniz/internal/version.Version=${VERSION}"
           ditto -c -k --keepParent build/bin/harmoniz.app build/bin/harmoniz.app.zip
 
       - name: Build Windows installer
         if: matrix.os == 'windows-latest'
         shell: bash
-        run: wails build -platform windows/amd64 -webview2 embed -nsis -o harmoniz
+        run: wails build -platform windows/amd64 -webview2 embed -nsis -o harmoniz -ldflags "-X harmoniz/internal/version.Version=${VERSION}"
 
       - name: Build Linux binary
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
-          wails build -platform linux/amd64 -tags webkit2_41 -o harmoniz
+          wails build -platform linux/amd64 -tags webkit2_41 -o harmoniz -ldflags "-X harmoniz/internal/version.Version=${VERSION}"
           cd build/bin
           tar -czf harmoniz-linux-amd64.tar.gz harmoniz
 
