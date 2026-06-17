@@ -5,6 +5,9 @@ on:
     tags:
       - "v*"
 
+permissions:
+  contents: write
+
 env:
   NODE_OPTIONS: "--max-old-space-size=4096"
 
@@ -17,15 +20,12 @@ jobs:
           - os: macos-latest
             platform: darwin/universal
             artifact: macos
-            nsis: "false"
           - os: windows-latest
             platform: windows/amd64
             artifact: windows
-            nsis: "true"
           - os: ubuntu-latest
             platform: linux/amd64
             artifact: linux
-            nsis: "false"
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -37,24 +37,49 @@ jobs:
           VERSION="${GITHUB_REF#refs/tags/v}"
           jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > wails.json.tmp && mv wails.json.tmp wails.json
 
-      - name: Build Wails app
-        uses: dAppServer/wails-build-action@v2.2
+      - name: Setup Go
+        uses: actions/setup-go@v5
         with:
-          build-name: harmoniz
-          build-platform: ${{ matrix.platform }}
           go-version: "1.24"
-          node-version: "20.x"
-          wails-version: v2.11.0
-          wails-build-webview2: embed
-          sign: "false"
-          package: "false"
-          nsis: ${{ matrix.nsis }}
-          build-cache: "true"
+          cache-dependency-path: go.sum
 
-      - name: Package Linux binary
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install Linux dependencies
+        if: matrix.os == 'ubuntu-latest'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev gcc
+
+      - name: Install Wails CLI
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.11.0
+
+      - name: Add Go bin to PATH
+        shell: bash
+        run: echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
+
+      - name: Build macOS app
+        if: matrix.os == 'macos-latest'
+        shell: bash
+        run: |
+          wails build -platform darwin/universal -o harmoniz
+          ditto -c -k --keepParent build/bin/harmoniz.app build/bin/harmoniz.app.zip
+
+      - name: Build Windows installer
+        if: matrix.os == 'windows-latest'
+        shell: bash
+        run: wails build -platform windows/amd64 -webview2 embed -nsis -o harmoniz
+
+      - name: Build Linux binary
         if: matrix.os == 'ubuntu-latest'
         shell: bash
         run: |
+          wails build -platform linux/amd64 -tags webkit2_41 -o harmoniz
           cd build/bin
           tar -czf harmoniz-linux-amd64.tar.gz harmoniz
 
@@ -82,8 +107,6 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout
         uses: actions/checkout@v4
