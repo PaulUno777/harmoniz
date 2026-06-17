@@ -3,7 +3,10 @@ module harmoniz
 go 1.24.0
 
 require (
+	github.com/bogem/id3v2/v2 v2.1.4
+	github.com/dhowden/tag v0.0.0-20240417053706-3d75831295e8
 	github.com/wailsapp/wails/v2 v2.11.0
+	github.com/xrash/smetrics v0.0.0-20201216005158-039620a65673
 	modernc.org/sqlite v1.45.0
 )
 

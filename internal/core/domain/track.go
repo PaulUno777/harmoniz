@@ -18,7 +18,8 @@ type Track struct {
 	Path     string `json:"path"`
 	Filename string `json:"filename"`
 	Size     int64  `json:"size"`
-	ModTime  int64  `json:"mod_time"` // Unix timestamp
+	ModTime  int64  `json:"mod_time"` // Unix timestamp (file mtime)
+	AddedAt  int64  `json:"added_at"` // Unix timestamp when first added to DB (for staleness check)
 
 	// Metadata
 	ArtistRaw  string `json:"artist_raw"`
@@ -38,7 +39,7 @@ type Track struct {
 	// Status
 	IsDeleted    bool        `json:"is_deleted"`
 	DeletedAt    *int64      `json:"deleted_at"`    // Unix timestamp
-	DeleteReason string      `json:"delete_reason"` // e.g., "PRUNE", "USER"
+	DeleteReason string      `json:"delete_reason"` // e.g., "PRUNE", "USER"the 
 	Status       TrackStatus `json:"status"`
 }
 
@@ -46,6 +47,23 @@ type Track struct {
 type ListTracksResult struct {
 	Tracks []Track `json:"Tracks"`
 	Total  int     `json:"Total"`
+}
+
+// TrackFilter encapsulates all filter criteria for listing tracks.
+type TrackFilter struct {
+	Root string // Library root path
+
+	// Text search (searches across multiple fields: artist, album, title, filename)
+	SearchQuery string
+	// Range filters
+	YearMin *int
+	YearMax *int
+	SizeMin *int64
+	SizeMax *int64
+
+	// Pagination
+	Limit  int
+	Offset int
 }
 
 // NormalizeArtist removes accents, punctuation, and converts to lowercase

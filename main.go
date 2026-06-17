@@ -3,6 +3,9 @@ package main
 import (
 	"embed"
 	"harmoniz/internal/adapters/db"
+	"harmoniz/internal/adapters/fs"
+	"harmoniz/internal/adapters/metadata"
+	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
 	"log/slog"
 	"os"
@@ -18,7 +21,7 @@ var assets embed.FS
 
 func main() {
 	// Initialize logger
-	logger.Init(slog.LevelDebug)
+	logger.Init(slog.LevelInfo)
 
 	// Setup DB
 	userHome, err := os.UserHomeDir()
@@ -37,11 +40,6 @@ func main() {
 	}
 	defer dbAdapter.Close()
 
-	// Debug: List embedded files
-	if err := db.ListEmbeddedFiles(); err != nil {
-		logger.Log.Warn("Failed to list embedded files", "error", err)
-	}
-
 	// Run migrations
 	if err := dbAdapter.RunMigrations(db.MigrationFS, "migrations"); err != nil {
 		logger.Log.Error("Failed to run migrations", "error", err)
@@ -50,23 +48,36 @@ func main() {
 
 	logger.Log.Info("Database initialized successfully", "path", dbPath)
 
-	// Create an instance of the app structure
-	app := NewApp()
+	// Setup Services
+	scannerService := scanner.NewService(dbAdapter)
+	fsAdapter := fs.NewAdapter()
+	metaWriter := metadata.NewAdapter()
+
+	// Create an instance of the app structure (dbAdapter implements ports.TrackRepository)
+	app := NewApp(scannerService, dbAdapter, fsAdapter, metaWriter)
 
 	// Create application with options
 	err = wails.Run(&options.App{
-		Title:     "Harmoniz",
-		Width:     1366,
-		Height:    768,
-		MinWidth:  1366,
+		Title:  "Harmoniz",
+		Width:  1366,
+		Height: 768,
+
 		MinHeight: 768,
+		Debug: options.Debug{
+			OpenInspectorOnStartup: false,
+		},
 		AssetServer: &assetserver.Options{
-			Assets: assets,
+			Assets:  assets,
+			Handler: streamHandler(),
 		},
 		BackgroundColour: &options.RGBA{R: 27, G: 38, B: 54, A: 1},
 		OnStartup:        app.startup,
 		Bind: []interface{}{
 			app,
+		},
+		DragAndDrop: &options.DragAndDrop{
+			EnableFileDrop:     true,
+			DisableWebViewDrop: false,
 		},
 	})
 

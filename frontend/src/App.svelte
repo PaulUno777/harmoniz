@@ -4,82 +4,460 @@
   import ContextPanel from "./lib/components/layout/ContextPanel.svelte";
   import Settings from "./lib/components/layout/Settings.svelte";
   import StatusBar from "./lib/components/layout/StatusBar.svelte";
-  import {
-    MagnifyingGlassIcon,
-    FunnelIcon,
-    ListIcon,
-    FileAudioIcon,
-    MusicNotesIcon,
-    FolderIcon,
-  } from "phosphor-svelte";
-  import { t } from "./lib/stores/i18n";
+  import TopBar from "./lib/components/layout/TopBar.svelte";
+  import EmptyState from "./lib/components/layout/EmptyState.svelte";
+  import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
+  import FilterPanel, { type FilterState } from "./lib/components/layout/FilterPanel.svelte";
+  import FloatingPlayer from "./lib/components/layout/FloatingPlayer.svelte";
+  import Toast from "./lib/components/ui/Toast.svelte";
   import { theme } from "./lib/stores/theme";
+  import { t } from "./lib/stores/i18n";
+  import { get } from "svelte/store";
   import type { Track, TabId } from "./lib/types";
+
+  // @ts-ignore
+  import {
+    OnFileDrop,
+    OnFileDropOff,
+    WindowSetTitle,
+  } from "../wailsjs/runtime/runtime.js";
+  // @ts-ignore
+  import {
+    OpenFolderDialog,
+    ScanLibrary,
+    ListTracks,
+    AnalyzeArtists,
+    DetectDuplicates,
+    DeleteTrack,
+  } from "../wailsjs/go/main/App.js";
+  import { analysis } from "./lib/stores/analysis";
+  import { organizer } from "./lib/stores/organizer";
+  import { playbackStore } from "./lib/stores/playback";
+  import { toast } from "./lib/stores/toast";
+  import {
+    loadSession,
+    debouncedSaveSession,
+    flushSessionSave,
+    clearLibrarySession,
+    type PersistedSession,
+  } from "./lib/stores/session";
+
+  // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
+  const orgSelectedSuggestion = organizer.selectedSuggestion
+  import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
+  import OrganizerDetailPanel from "./lib/components/organizer/OrganizerDetailPanel.svelte";
+  import CleanerView from "./lib/components/analysis/CleanerView.svelte";
+  // @ts-ignore
+  import { ApplyOrganizerSuggestion } from "../wailsjs/go/main/App.js";
 
   let activeTab = $state<TabId>("library");
   let selectedTrack = $state<Track | null>(null);
   let currentLibraryPath = $state("");
-  let isDragOver = $state(false);
-  let backendConnected = $state<boolean | null>(null);
+  let tracks = $state<Track[]>([]);
+  let totalTrackCount = $state(0);
 
-  // @ts-ignore
-  import { OnFileDrop, OnFileDropOff } from "../wailsjs/runtime/runtime.js";
-  // @ts-ignore
-  import { Greet } from "../wailsjs/go/main/App.js";
+  let isLoadingTracks = $state(false);
+  let isLoadingMore = $state(false);
+
+  // Search and Filter State
+  let searchQuery = $state("");
+  let filters = $state<FilterState>({
+    yearMin: 0,
+    yearMax: 0,
+    sizeMin: 0,
+    sizeMax: 0,
+  });
+  let isFilterPanelOpen = $state(false);
+
+  // Pagination
+  const PAGE_SIZE = 200;
+  let currentOffset = $state(0);
+
+  let isRestoringSession = $state(false);
+  let sessionRestored = $state(false);
+  let previousTab = $state<TabId>("library");
+  let initialScrollIndex = $state<number | null>(null);
+
+  function collectSessionSnapshot(): Partial<PersistedSession> {
+    return {
+      libraryPath: currentLibraryPath,
+      activeTab,
+      searchQuery,
+      filters: { ...filters },
+      listOffset: currentOffset,
+      selectedTrackPath: selectedTrack?.path ?? null,
+      playback: playbackStore.getPersistedPlayback(),
+    };
+  }
+
+  function persistAppSession() {
+    debouncedSaveSession(collectSessionSnapshot());
+  }
+
+  function handleBeforeUnload() {
+    playbackStore.persistPlaybackNow();
+    flushSessionSave(collectSessionSnapshot());
+  }
+
+  async function restoreSession() {
+    const saved = loadSession();
+    activeTab = saved.activeTab;
+    previousTab = saved.activeTab;
+    searchQuery = saved.searchQuery;
+    filters = { ...saved.filters };
+
+    if (!saved.libraryPath) {
+      sessionRestored = true;
+      return;
+    }
+
+    isRestoringSession = true;
+    currentLibraryPath = saved.libraryPath;
+    updateWindowTitle(saved.libraryPath);
+
+    try {
+      isLoadingTracks = true;
+      await ScanLibrary(saved.libraryPath);
+      await loadInitialTracks();
+
+      while (currentOffset < saved.listOffset && tracks.length < totalTrackCount) {
+        await loadMoreTracks();
+      }
+
+      if (saved.selectedTrackPath) {
+        selectedTrack =
+          tracks.find((t) => t.path === saved.selectedTrackPath) ?? null;
+      } else if (saved.listOffset > PAGE_SIZE && tracks.length > 0) {
+        initialScrollIndex = tracks.length - 1;
+      }
+
+      if (saved.playback?.trackPath) {
+        let track = tracks.find((t) => t.path === saved.playback!.trackPath);
+        if (!track && tracks.length < totalTrackCount) {
+          await loadMoreTracks();
+          track = tracks.find((t) => t.path === saved.playback!.trackPath);
+        }
+        if (track) {
+          const { trackPath: _path, ...playbackOpts } = saved.playback;
+          playbackStore.restore(track, tracks, playbackOpts);
+        }
+      }
+    } catch (error) {
+      console.error("Session restore failed:", error);
+      clearLibrarySession();
+      currentLibraryPath = "";
+      selectedTrack = null;
+      tracks = [];
+      totalTrackCount = 0;
+      currentOffset = 0;
+    } finally {
+      isLoadingTracks = false;
+      isRestoringSession = false;
+      sessionRestored = true;
+    }
+  }
+
+  function parentDir(p: string): string {
+    const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
+    return i <= 0 ? p : p.slice(0, i);
+  }
+
+  function applyDroppedPaths(paths: string[]) {
+    if (!paths?.length) {
+      console.log("No paths provided");
+      return;
+    }
+    const p = paths[0];
+    console.log("Processing path:", p);
+    const isFolder =
+      p.endsWith("/") || p.endsWith("\\") || !/\.([^/\\]+)$/.test(p);
+    const folder = isFolder ? p.replace(/[/\\]+$/, "") : parentDir(p);
+    console.log("Extracted folder:", folder, "isFolder:", isFolder);
+    if (folder) {
+      currentLibraryPath = folder;
+      updateWindowTitle(folder);
+      console.log("Dropped folder:", folder);
+      handleScan(folder);
+    }
+  }
+
+  function updateWindowTitle(path: string) {
+    try {
+      const title = get(t)("appTitle");
+      WindowSetTitle(path ? `${title}  —  ${path}` : title);
+    } catch (_) {}
+  }
+
+  $effect(() => {
+    $t("appTitle");
+    updateWindowTitle(currentLibraryPath);
+  });
 
   onMount(() => {
     theme.init();
-    backendConnected = true; // Mocked for now
-    OnFileDrop((x: number, y: number, paths: string[]) => {
-      if (paths.length > 0) {
-        currentLibraryPath = paths[0];
-        console.log("Dropped path:", currentLibraryPath);
-      }
+    void restoreSession();
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
+    OnFileDrop((_x: number, _y: number, paths: string[]) => {
+      applyDroppedPaths(paths);
     }, true);
   });
 
   onDestroy(() => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    playbackStore.persistPlaybackNow();
+    flushSessionSave(collectSessionSnapshot());
     OnFileDropOff();
   });
 
   async function handleBrowse() {
-    // @ts-ignore - window.runtime is provided by Wails
-    const path = await window.runtime.OpenDirectoryDialog({
-      Title: $t("selectLibrary"),
-    });
-    if (path) {
-      currentLibraryPath = path;
-      console.log("Selected library:", path);
+    try {
+      const path = await OpenFolderDialog();
+      if (path) {
+        currentLibraryPath = path;
+        updateWindowTitle(path);
+        console.log("Selected library:", path);
+        await handleScan(path);
+      }
+    } catch (error) {
+      console.error("Failed to open folder dialog:", error);
     }
   }
 
-  // Mock data for initial layout testing
-  const mockTracks: Track[] = [
-    {
-      title: "Blinding Lights",
-      artist: "The Weeknd",
-      album: "After Hours",
-      year: 2020,
-      size: "8.4 MB",
-      path: "/Music/The Weeknd/After Hours/01 Blinding Lights.mp3",
-    },
-    {
-      title: "Levitating",
-      artist: "Dua Lipa",
-      album: "Future Nostalgia",
-      year: 2020,
-      size: "7.2 MB",
-      path: "/Music/Dua Lipa/Future Nostalgia/05 Levitating.mp3",
-    },
-    {
-      title: "Stay",
-      artist: "The Kid LAROI",
-      album: "F*CK LOVE",
-      year: 2021,
-      size: "5.1 MB",
-      path: "/Music/The Kid LAROI/Stay.mp3",
-    },
-  ];
+  async function handleScan(rootPath: string) {
+    try {
+      isLoadingTracks = true;
+      await ScanLibrary(rootPath);
+
+      // Reset pagination state
+      currentOffset = 0;
+      tracks = [];
+      selectedTrack = null;
+
+      // Load initial tracks
+      await loadInitialTracks();
+    } catch (error) {
+      console.error("Scan failed:", error);
+      isLoadingTracks = false;
+    }
+  }
+  /**
+   * Loads the first page of tracks.
+   * Resets pagination state.
+   */
+  async function loadInitialTracks() {
+    if (!currentLibraryPath) {
+      return;
+    }
+
+    try {
+      // Convert MB to bytes for size filters
+      const sizeMinBytes = filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0;
+      const sizeMaxBytes = filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0;
+
+      const result = await ListTracks(
+        currentLibraryPath,
+        searchQuery,
+        filters.yearMin,
+        filters.yearMax,
+        sizeMinBytes,
+        sizeMaxBytes,
+        PAGE_SIZE,
+        0
+      );
+
+      tracks =
+        result?.Tracks?.map((t: any) => ({
+          ...t,
+          artist: t.artist_raw || "",
+          album: t.album_raw || "",
+        })) ?? [];
+
+      totalTrackCount = result?.Total ?? 0;
+      currentOffset = tracks.length;
+
+      console.log("Initial load:", tracks.length, "/", totalTrackCount);
+    } catch (error) {
+      console.error("Initial load failed:", error);
+      tracks = [];
+      totalTrackCount = 0;
+    } finally {
+      isLoadingTracks = false;
+    }
+  }
+  /**
+   * Loads additional tracks when virtualization
+   * detects that user scrolls near the end.
+   */
+  async function loadMoreTracks() {
+    if (isLoadingMore) return;
+    if (tracks.length >= totalTrackCount) return;
+
+    isLoadingMore = true;
+
+    try {
+      // Convert MB to bytes for size filters
+      const sizeMinBytes = filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0;
+      const sizeMaxBytes = filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0;
+
+      const result = await ListTracks(
+        currentLibraryPath,
+        searchQuery,
+        filters.yearMin,
+        filters.yearMax,
+        sizeMinBytes,
+        sizeMaxBytes,
+        PAGE_SIZE,
+        currentOffset
+      );
+
+      const newTracks =
+        result?.Tracks?.map((t: any) => ({
+          ...t,
+          artist: t.artist_raw || "",
+          album: t.album_raw || "",
+        })) ?? [];
+
+      tracks = [...tracks, ...newTracks];
+      currentOffset += newTracks.length;
+
+      console.log("Loaded more:", tracks.length, "/", totalTrackCount);
+    } catch (error) {
+      console.error("Load more failed:", error);
+    } finally {
+      isLoadingMore = false;
+    }
+  }
+
+  // Debounced search
+  let searchDebounceTimer: number;
+  $effect(() => {
+    // Watch searchQuery changes
+    searchQuery;
+
+    if (!currentLibraryPath || isRestoringSession || !sessionRestored) return;
+
+    clearTimeout(searchDebounceTimer);
+    searchDebounceTimer = setTimeout(() => {
+      handleFilterChange();
+    }, 300);
+  });
+
+  $effect(() => {
+    if (!sessionRestored || isRestoringSession) return;
+    currentLibraryPath;
+    activeTab;
+    searchQuery;
+    filters.yearMin;
+    filters.yearMax;
+    filters.sizeMin;
+    filters.sizeMax;
+    currentOffset;
+    selectedTrack?.path;
+    persistAppSession();
+  });
+
+  async function handleFilterChange() {
+    currentOffset = 0;
+    tracks = [];
+    isLoadingTracks = true;
+    await loadInitialTracks();
+  }
+
+  function handleApplyFilters(newFilters: FilterState) {
+    filters = newFilters;
+    handleFilterChange();
+  }
+
+  // Count active filters
+  const activeFilterCount = $derived(
+    (filters.yearMin > 0 ? 1 : 0) +
+    (filters.yearMax > 0 ? 1 : 0) +
+    (filters.sizeMin > 0 ? 1 : 0) +
+    (filters.sizeMax > 0 ? 1 : 0)
+  );
+
+  const hasMoreTracks = $derived(tracks.length < totalTrackCount);
+
+  const analysisLoadingStore = analysis.loading;
+
+  function handleTrackSaved(updated: Track) {
+    selectedTrack = updated
+    tracks = tracks.map(t => t.id === updated.id ? updated : t)
+  }
+
+  async function handleOrganizerApply(trackID: number, fields: Record<string, string>) {
+    try {
+      const template = get(organizer.filenameTemplate)
+      const artist   = fields['artist']    ?? ''
+      const title    = fields['title']     ?? ''
+      const album    = fields['album']     ?? ''
+      const year     = fields['year']      ? parseInt(fields['year'])      : 0
+      const trackNum = fields['track_num'] ? parseInt(fields['track_num']) : 0
+      await ApplyOrganizerSuggestion(trackID, artist, title, album, year, trackNum, template, currentLibraryPath)
+      organizer.updateTrackSuggestion(trackID, fields)
+      toast.success(get(t)('saved'))
+    } catch (e) {
+      toast.error(`${get(t)('saveError')}: ${e}`)
+      throw e
+    }
+  }
+
+  // Reload tracks whenever we switch back to the library tab so organizer/cleaner
+  // edits (renames, deletes) are reflected immediately.
+  $effect(() => {
+    const tab = activeTab;
+    if (
+      tab === "library" &&
+      previousTab !== "library" &&
+      currentLibraryPath &&
+      !isRestoringSession &&
+      sessionRestored
+    ) {
+      currentOffset = 0;
+      tracks = [];
+      loadInitialTracks();
+    }
+    previousTab = tab;
+  });
+
+  // Sync selectedTrack with playback when prev/next is used while on the library tab.
+  // The VirtualList scroll-to-selected effect in LibraryContent fires automatically.
+  $effect(() => {
+    const unsub = playbackStore.subscribe(state => {
+      if (activeTab !== 'library' || !state.currentTrack) return
+      if (state.currentTrack.path !== selectedTrack?.path) {
+        const match = tracks.find(t => t.path === state.currentTrack!.path)
+        if (match) selectedTrack = match
+      }
+    })
+    return () => unsub()
+  })
+
+  async function handleDeleteTrack(id: number) {
+    await DeleteTrack(id);
+    analysis.removeFromGroup(id);
+  }
+
+  async function handleRunAnalysis() {
+    if (!currentLibraryPath) return;
+    analysis.setError(null);
+    analysis.setLoading(true);
+    try {
+      const [suggestions, duplicates] = await Promise.all([
+        AnalyzeArtists(currentLibraryPath),
+        DetectDuplicates(currentLibraryPath),
+      ]);
+      analysis.setArtistSuggestions((suggestions ?? []) as import("./lib/types").ArtistSuggestion[]);
+      analysis.setDuplicates((duplicates ?? []) as Track[][]);
+      analysis.setHasRunOnce(true);
+    } catch (e) {
+      analysis.setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      analysis.setLoading(false);
+    }
+  }
 </script>
 
 <div
@@ -89,66 +467,22 @@
 >
   <Sidebar bind:activeTab />
 
-  <div class="flex-1 flex flex-col min-w-0 bg-background relative">
-    <main class="flex-1 flex flex-col min-w-0 relative">
-      <!-- Top Bar -->
-      <header
-        class="h-16 border-b border-border flex items-center px-8 justify-between gap-8 bg-background/80 backdrop-blur-md z-10 sticky top-0"
-      >
-        <div class="flex items-center gap-4 flex-1">
-          <h2 class="text-lg font-bold capitalize font-display">
-            {$t(activeTab as any)}
-          </h2>
-          <div class="h-4 w-px bg-border"></div>
+  <div
+    class="flex-1 flex flex-col min-w-0 min-h-0 bg-background relative overflow-hidden"
+  >
+    <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
+      <TopBar 
+        {activeTab} 
+        onBrowse={handleBrowse} 
+        {searchQuery}
+        onSearchChange={(query) => searchQuery = query}
+        onFilterToggle={() => isFilterPanelOpen = !isFilterPanelOpen}
+        {activeFilterCount}
+        onRunAnalysis={handleRunAnalysis}
+        analysisLoading={$analysisLoadingStore}
+        hasLibrary={!!currentLibraryPath}
+      />
 
-          <div class="flex items-center gap-3 flex-1">
-            <button
-              onclick={handleBrowse}
-              class="px-4 py-1.5 bg-accent/10 hover:bg-accent/20 text-accent rounded-lg font-bold text-xs transition-all flex items-center gap-2 group whitespace-nowrap"
-            >
-              <FolderIcon size={16} />
-              {$t("browse")}
-            </button>
-
-            {#if currentLibraryPath}
-              <div
-                class="text-[11px] font-mono text-text-secondary bg-white/5 px-3 py-1.5 rounded-full truncate max-w-sm"
-              >
-                {currentLibraryPath}
-              </div>
-            {/if}
-
-            <div class="relative flex-1 max-w-md group">
-              <MagnifyingGlassIcon
-                size={18}
-                class="absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary group-focus-within:text-accent transition-colors"
-              />
-              <input
-                type="text"
-                placeholder={$t("search")}
-                class="w-full bg-surface border border-border rounded-full py-2 pl-10 pr-4 outline-none focus:ring-1 focus:ring-accent transition-all"
-              />
-            </div>
-          </div>
-        </div>
-
-        <div class="flex items-center gap-2">
-          <button
-            class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors"
-            title="Filter"
-          >
-            <FunnelIcon size={20} />
-          </button>
-          <button
-            class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors"
-            title="View Options"
-          >
-            <ListIcon size={20} />
-          </button>
-        </div>
-      </header>
-
-      <!-- Content Area -->
       <div
         class="flex-1 relative overflow-hidden"
         oncontextmenu={(e) => e.preventDefault()}
@@ -156,104 +490,64 @@
       >
         {#if activeTab === "settings"}
           <Settings />
+        {:else if activeTab === "organizer"}
+          <OrganizerView libraryPath={currentLibraryPath} onBrowse={handleBrowse} />
+        {:else if activeTab === "cleaner"}
+          <CleanerView
+            onBrowse={handleBrowse}
+            libraryPath={currentLibraryPath}
+            onDeleteTrack={handleDeleteTrack}
+          />
         {:else if !currentLibraryPath}
-          <!-- Empty state / Drop Zone -->
-          <div
-            class="h-full flex flex-col items-center justify-center p-12 text-center"
-          >
-            <div
-              class="w-full max-w-lg aspect-video border-2 border-dashed rounded-3xl flex flex-col items-center justify-center gap-6 transition-all duration-500 pt-4
-                     {isDragOver
-                ? 'border-accent bg-accent/5 scale-105 shadow-2xl shadow-accent/10'
-                : 'border-border bg-surface/30 hover:border-text-muted hover:bg-surface/50'}"
-              role="button"
-              tabindex="0"
-              style="--wails-drop-target: drop"
-              onmouseenter={() => (isDragOver = true)}
-              onmouseleave={() => (isDragOver = false)}
-            >
-              <div
-                class="w-16 h-16 bg-accent/10 rounded-2xl flex items-center justify-center text-accent"
-              >
-                <MusicNotesIcon size={32} weight="duotone" />
-              </div>
-              <div>
-                <h3 class="text-xl font-bold font-display mb-2">
-                  {$t("emptyStateTitle")}
-                </h3>
-                <p
-                  class="text-text-secondary text-sm max-w-xs mx-auto leading-relaxed"
-                >
-                  {$t("emptyStateSubtitle")}
-                </p>
-              </div>
-
-              <div class="flex items-center gap-3">
-                <button
-                  onclick={handleBrowse}
-                  class="px-8 py-2.5 bg-accent text-background font-bold rounded-xl hover:scale-105 transition-all shadow-lg shadow-accent/20 active:scale-95"
-                >
-                  {$t("openFolder")}
-                </button>
-              </div>
-
-              <span
-                class="text-[10px] uppercase tracking-widest font-bold text-text-muted opacity-60"
-              >
-                {$t("dropZone")}
-              </span>
-            </div>
-          </div>
+          <EmptyState onBrowse={handleBrowse} />
         {:else}
-          <div class="h-full overflow-y-auto p-8 custom-scrollbar">
-            <div class="grid gap-2 max-w-5xl mx-auto">
-              {#each mockTracks as track}
-                <button
-                  onclick={() => {
-                    selectedTrack = track;
-                    // Just to satisfy lint warning for Greet
-                    Greet("User").then(console.log);
-                  }}
-                  class="flex items-center gap-4 p-4 rounded-xl border border-transparent hover:border-border hover:bg-surface/30 transition-all text-left group
-                         {selectedTrack?.path === track.path
-                    ? 'bg-surface border-border ring-1 ring-accent/20'
-                    : ''}"
-                >
-                  <div
-                    class="w-11 h-11 bg-surface rounded-lg flex items-center justify-center border border-border group-hover:border-accent/30 transition-all group-hover:shadow-lg group-hover:shadow-accent/5"
-                  >
-                    <FileAudioIcon
-                      size={20}
-                      weight="duotone"
-                      class="text-text-muted group-hover:text-accent transition-colors"
-                    />
-                  </div>
-                  <div class="flex-1 min-w-0">
-                    <div
-                      class="font-bold text-text-primary truncate group-hover:text-accent transition-colors"
-                    >
-                      {track.title}
-                    </div>
-                    <div class="text-xs text-text-secondary truncate mt-0.5">
-                      {track.artist} <span class="mx-1.5 opacity-30">•</span>
-                      {track.album}
-                    </div>
-                  </div>
-                  <div
-                    class="text-[11px] font-mono font-bold text-text-muted opacity-50 bg-white/5 px-2 py-1 rounded group-hover:opacity-100 transition-all"
-                  >
-                    {track.size}
-                  </div>
-                </button>
-              {/each}
-            </div>
-          </div>
+          <LibraryContent
+            {tracks}
+            {selectedTrack}
+            {isLoadingTracks}
+            {currentLibraryPath}
+            {hasMoreTracks}
+            {isLoadingMore}
+            {initialScrollIndex}
+            onInitialScrollDone={() => (initialScrollIndex = null)}
+            onSelectTrack={(track) => (selectedTrack = track)}
+            onLoadMore={loadMoreTracks}
+          />
         {/if}
       </div>
+
+      <FloatingPlayer {activeTab} />
     </main>
 
-    <StatusBar connected={backendConnected} />
+    <footer class="shrink-0">
+      <StatusBar
+        tracked={totalTrackCount}
+        cleaned={0}
+        hasLibrary={!!currentLibraryPath}
+      />
+    </footer>
   </div>
 
-  <ContextPanel bind:selectedTrack />
+  <aside class="w-80 shrink-0 h-full overflow-hidden flex flex-col">
+    {#if activeTab === 'organizer'}
+      <OrganizerDetailPanel
+        suggestion={$orgSelectedSuggestion}
+        onApply={handleOrganizerApply}
+        onClose={() => organizer.setSelectedTrack(null)}
+      />
+    {:else}
+      <ContextPanel bind:selectedTrack onTrackSaved={handleTrackSaved} />
+    {/if}
+  </aside>
+
+  <!-- Filter Panel -->
+  <FilterPanel
+    isOpen={isFilterPanelOpen}
+    onClose={() => isFilterPanelOpen = false}
+    onApply={handleApplyFilters}
+    initialFilters={filters}
+  />
 </div>
+
+<!-- Global toast notifications -->
+<Toast />

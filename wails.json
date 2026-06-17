@@ -9,5 +9,12 @@
   "author": {
     "name": "Paulin NZODOUM",
     "email": "78661160+PaulUno777@users.noreply.github.com"
+  },
+  "info": {
+    "companyName": "Paulin NZODOUM",
+    "productName": "Harmoniz",
+    "productVersion": "0.5.0",
+    "copyright": "Copyright © 2026 Paulin NZODOUM",
+    "comments": "High-performance transactional audio library manager"
   }
 }
