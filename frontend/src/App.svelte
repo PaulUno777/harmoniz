@@ -42,6 +42,7 @@
     type PersistedSession,
   } from "./lib/stores/session";
 
+  import { devMode } from "./lib/stores/devMode";
   // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
   const orgSelectedSuggestion = organizer.selectedSuggestion
   import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
@@ -433,6 +434,17 @@
       }
     })
     return () => unsub()
+  })
+
+  // Ctrl+Shift+D toggles dev mode (shows suggestion trace in OrganizerDetailPanel).
+  $effect(() => {
+    function onKeydown(e: KeyboardEvent) {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        devMode.update(v => !v)
+      }
+    }
+    window.addEventListener('keydown', onKeydown)
+    return () => window.removeEventListener('keydown', onKeydown)
   })
 
   async function handleDeleteTrack(id: number) {

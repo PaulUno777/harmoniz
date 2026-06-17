@@ -7,6 +7,8 @@
   } from 'phosphor-svelte'
   // @ts-ignore
   import { AnalyzeForOrganize, PreviewFilenameTemplate, ApplyAllHighConfidence } from '../../../../wailsjs/go/main/App.js'
+  // @ts-ignore
+  import { EventsOn, EventsOff } from '../../../../wailsjs/runtime/runtime.js'
   import { organizer } from '../../stores/organizer'
   import { toast } from '../../stores/toast'
   import { t } from '../../stores/i18n'
@@ -38,11 +40,23 @@
   onMount(() => {
     const unsub = t.subscribe(fn => { tr = fn as any })
     mounted = true
+
+    EventsOn('organize:analyze_done', (summary: any) => {
+      if (summary?.with_suggestions !== undefined) {
+        toast.success(
+          `${summary.with_suggestions} suggestions · ${summary.high_confidence} high confidence`
+        )
+      }
+    })
+
     if (libraryPath && get(status) !== 'analyzing' && get(status) !== 'applying') {
       lastAnalyzedPath = libraryPath
       handleAnalyze()
     }
-    return unsub
+    return () => {
+      unsub()
+      EventsOff('organize:analyze_done')
+    }
   })
 
   // Re-analyze when path changes (after mount)

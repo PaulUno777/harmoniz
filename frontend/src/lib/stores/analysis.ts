@@ -1,8 +1,7 @@
 import { writable } from "svelte/store";
-import type { Track } from "../types";
-import type { ArtistSuggestion } from "../types";
+import type { ArtistSuggestion, DuplicateGroup } from "../types";
 
-const duplicateGroups = writable<Track[][]>([]);
+const duplicateGroups = writable<DuplicateGroup[]>([]);
 const artistSuggestions = writable<ArtistSuggestion[]>([]);
 const loading = writable(false);
 const error = writable<string | null>(null);
@@ -15,7 +14,7 @@ export const analysis = {
   loading,
   error,
   hasRunOnce,
-  setDuplicates(groups: Track[][]) {
+  setDuplicates(groups: DuplicateGroup[]) {
     duplicateGroups.set(Array.isArray(groups) ? groups : []);
   },
   setArtistSuggestions(suggestions: ArtistSuggestion[]) {
@@ -33,12 +32,12 @@ export const analysis = {
   removeFromGroup(trackId: number) {
     duplicateGroups.update(groups =>
       groups
-        .map(g => g.filter(t => t.id !== trackId))
-        .filter(g => g.length > 1)
+        .map(g => ({ ...g, tracks: g.tracks.filter(t => t.id !== trackId) }))
+        .filter(g => g.tracks.length > 1)
     );
   },
   resolveGroup(firstTrackPath: string) {
-    duplicateGroups.update(groups => groups.filter(g => g[0]?.path !== firstTrackPath));
+    duplicateGroups.update(groups => groups.filter(g => g.tracks[0]?.path !== firstTrackPath));
   },
   reset() {
     duplicateGroups.set([]);

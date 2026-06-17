@@ -12,15 +12,21 @@ export function ApplyOrganizerSuggestion(arg1:number,arg2:string,arg3:string,arg
 
 export function DeleteTrack(arg1:number):Promise<void>;
 
-export function DetectDuplicates(arg1:string):Promise<Array<any>>;
+export function DetectDuplicates(arg1:string):Promise<Array<domain.DuplicateGroup>>;
+
+export function GetLastDebugReport():Promise<string>;
 
 export function ListTracks(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:number):Promise<domain.ListTracksResult>;
+
+export function OpenDebugFolder():Promise<void>;
 
 export function OpenFolderDialog():Promise<string>;
 
 export function PreviewFilenameTemplate(arg1:string,arg2:string):Promise<Array<domain.FilenamePreview>>;
 
 export function RenameTrack(arg1:number,arg2:string):Promise<string>;
+
+export function RescanLibrary(arg1:string):Promise<void>;
 
 export function ScanLibrary(arg1:string):Promise<void>;
 

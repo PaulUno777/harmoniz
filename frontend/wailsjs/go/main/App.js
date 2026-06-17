@@ -26,8 +26,16 @@ export function DetectDuplicates(arg1) {
   return window['go']['main']['App']['DetectDuplicates'](arg1);
 }
 
+export function GetLastDebugReport() {
+  return window['go']['main']['App']['GetLastDebugReport']();
+}
+
 export function ListTracks(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
   return window['go']['main']['App']['ListTracks'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
+}
+
+export function OpenDebugFolder() {
+  return window['go']['main']['App']['OpenDebugFolder']();
 }
 
 export function OpenFolderDialog() {
@@ -40,6 +48,10 @@ export function PreviewFilenameTemplate(arg1, arg2) {
 
 export function RenameTrack(arg1, arg2) {
   return window['go']['main']['App']['RenameTrack'](arg1, arg2);
+}
+
+export function RescanLibrary(arg1) {
+  return window['go']['main']['App']['RescanLibrary'](arg1);
 }
 
 export function ScanLibrary(arg1) {
