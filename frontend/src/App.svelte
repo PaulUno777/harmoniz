@@ -13,7 +13,7 @@
   import { theme } from "./lib/stores/theme";
   import { t } from "./lib/stores/i18n";
   import { get } from "svelte/store";
-  import type { Track, TabId } from "./lib/types";
+  import type { Track, TabId, DuplicateGroup } from "./lib/types";
 
   // @ts-ignore
   import {
@@ -475,7 +475,7 @@
         DetectDuplicates(currentLibraryPath),
       ]);
       analysis.setArtistSuggestions((suggestions ?? []) as import("./lib/types").ArtistSuggestion[]);
-      analysis.setDuplicates((duplicates ?? []) as Track[][]);
+      analysis.setDuplicates((duplicates ?? []) as DuplicateGroup[]);
       analysis.setHasRunOnce(true);
     } catch (e) {
       analysis.setError(e instanceof Error ? e.message : String(e));
