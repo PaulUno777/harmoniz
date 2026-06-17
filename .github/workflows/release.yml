@@ -1,0 +1,112 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  NODE_OPTIONS: "--max-old-space-size=4096"
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            platform: darwin/universal
+            artifact: macos
+            nsis: "false"
+          - os: windows-latest
+            platform: windows/amd64
+            artifact: windows
+            nsis: "true"
+          - os: ubuntu-latest
+            platform: linux/amd64
+            artifact: linux
+            nsis: "false"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          jq --arg v "$VERSION" '.info.productVersion = $v' wails.json > wails.json.tmp && mv wails.json.tmp wails.json
+
+      - name: Build Wails app
+        uses: dAppServer/wails-build-action@v2.2
+        with:
+          build-name: harmoniz
+          build-platform: ${{ matrix.platform }}
+          go-version: "1.24"
+          node-version: "20.x"
+          wails-version: v2.11.0
+          wails-build-webview2: embed
+          sign: "false"
+          package: "false"
+          nsis: ${{ matrix.nsis }}
+          build-cache: "true"
+
+      - name: Package Linux binary
+        if: matrix.os == 'ubuntu-latest'
+        shell: bash
+        run: |
+          cd build/bin
+          tar -czf harmoniz-linux-amd64.tar.gz harmoniz
+
+      - name: Upload macOS artifact
+        if: matrix.os == 'macos-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos
+          path: build/bin/harmoniz.app.zip
+
+      - name: Upload Windows artifact
+        if: matrix.os == 'windows-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: build/bin/harmoniz-amd64-installer.exe
+
+      - name: Upload Linux artifact
+        if: matrix.os == 'ubuntu-latest'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: build/bin/harmoniz-linux-amd64.tar.gz
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: Extract changelog
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/v}"
+          if awk "/^## \\[$VERSION\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md | grep -q .; then
+            awk "/^## \\[$VERSION\\]/{flag=1; next} /^## \\[/{flag=0} flag" CHANGELOG.md > release_notes.md
+          else
+            echo "Release v${VERSION}" > release_notes.md
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body_path: release_notes.md
+          files: |
+            artifacts/**

@@ -21,7 +21,7 @@ var assets embed.FS
 
 func main() {
 	// Initialize logger
-	logger.Init(slog.LevelDebug)
+	logger.Init(slog.LevelInfo)
 
 	// Setup DB
 	userHome, err := os.UserHomeDir()
@@ -39,11 +39,6 @@ func main() {
 		panic(err)
 	}
 	defer dbAdapter.Close()
-
-	// Debug: List embedded files
-	if err := db.ListEmbeddedFiles(); err != nil {
-		logger.Log.Warn("Failed to list embedded files", "error", err)
-	}
 
 	// Run migrations
 	if err := dbAdapter.RunMigrations(db.MigrationFS, "migrations"); err != nil {
@@ -69,7 +64,7 @@ func main() {
 
 		MinHeight: 768,
 		Debug: options.Debug{
-			OpenInspectorOnStartup: true,
+			OpenInspectorOnStartup: false,
 		},
 		AssetServer: &assetserver.Options{
 			Assets:  assets,

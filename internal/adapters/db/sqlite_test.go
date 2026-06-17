@@ -53,8 +53,8 @@ func TestDatabaseSetup(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Migration version not found: %v", err)
 	}
-	if version != 1 {
-		t.Errorf("Expected migration version 1, got %d", version)
+	if version != 2 {
+		t.Errorf("Expected migration version 2, got %d", version)
 	}
 
 	// 5. Verify WAL Mode
