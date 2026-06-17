@@ -7,7 +7,7 @@
     TranslateIcon, 
     MusicNotesIcon 
   } from 'phosphor-svelte'
-  import { t, locale, type Locale } from '../../stores/i18n'
+  import { t, locale, setLocale, type Locale } from '../../stores/i18n'
   import { theme } from '../../stores/theme'
   import CustomSelect from '../ui/CustomSelect.svelte'
   import ThemePreviewButton from '../ui/ThemePreviewButton.svelte'
@@ -120,7 +120,8 @@
         <div class="w-40">
           <CustomSelect 
             options={languages}
-            bind:value={$locale}
+            value={$locale}
+            onSelect={(id) => setLocale(id as Locale)}
           />
         </div>
       </div>

@@ -34,6 +34,13 @@
   import { organizer } from "./lib/stores/organizer";
   import { playbackStore } from "./lib/stores/playback";
   import { toast } from "./lib/stores/toast";
+  import {
+    loadSession,
+    debouncedSaveSession,
+    flushSessionSave,
+    clearLibrarySession,
+    type PersistedSession,
+  } from "./lib/stores/session";
 
   // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
   const orgSelectedSuggestion = organizer.selectedSuggestion
@@ -65,6 +72,90 @@
   // Pagination
   const PAGE_SIZE = 200;
   let currentOffset = $state(0);
+
+  let isRestoringSession = $state(false);
+  let sessionRestored = $state(false);
+  let previousTab = $state<TabId>("library");
+  let initialScrollIndex = $state<number | null>(null);
+
+  function collectSessionSnapshot(): Partial<PersistedSession> {
+    return {
+      libraryPath: currentLibraryPath,
+      activeTab,
+      searchQuery,
+      filters: { ...filters },
+      listOffset: currentOffset,
+      selectedTrackPath: selectedTrack?.path ?? null,
+      playback: playbackStore.getPersistedPlayback(),
+    };
+  }
+
+  function persistAppSession() {
+    debouncedSaveSession(collectSessionSnapshot());
+  }
+
+  function handleBeforeUnload() {
+    playbackStore.persistPlaybackNow();
+    flushSessionSave(collectSessionSnapshot());
+  }
+
+  async function restoreSession() {
+    const saved = loadSession();
+    activeTab = saved.activeTab;
+    previousTab = saved.activeTab;
+    searchQuery = saved.searchQuery;
+    filters = { ...saved.filters };
+
+    if (!saved.libraryPath) {
+      sessionRestored = true;
+      return;
+    }
+
+    isRestoringSession = true;
+    currentLibraryPath = saved.libraryPath;
+    updateWindowTitle(saved.libraryPath);
+
+    try {
+      isLoadingTracks = true;
+      await ScanLibrary(saved.libraryPath);
+      await loadInitialTracks();
+
+      while (currentOffset < saved.listOffset && tracks.length < totalTrackCount) {
+        await loadMoreTracks();
+      }
+
+      if (saved.selectedTrackPath) {
+        selectedTrack =
+          tracks.find((t) => t.path === saved.selectedTrackPath) ?? null;
+      } else if (saved.listOffset > PAGE_SIZE && tracks.length > 0) {
+        initialScrollIndex = tracks.length - 1;
+      }
+
+      if (saved.playback?.trackPath) {
+        let track = tracks.find((t) => t.path === saved.playback!.trackPath);
+        if (!track && tracks.length < totalTrackCount) {
+          await loadMoreTracks();
+          track = tracks.find((t) => t.path === saved.playback!.trackPath);
+        }
+        if (track) {
+          const { trackPath: _path, ...playbackOpts } = saved.playback;
+          playbackStore.restore(track, tracks, playbackOpts);
+        }
+      }
+    } catch (error) {
+      console.error("Session restore failed:", error);
+      clearLibrarySession();
+      currentLibraryPath = "";
+      selectedTrack = null;
+      tracks = [];
+      totalTrackCount = 0;
+      currentOffset = 0;
+    } finally {
+      isLoadingTracks = false;
+      isRestoringSession = false;
+      sessionRestored = true;
+    }
+  }
 
   function parentDir(p: string): string {
     const i = Math.max(p.lastIndexOf("/"), p.lastIndexOf("\\"));
@@ -104,6 +195,9 @@
 
   onMount(() => {
     theme.init();
+    void restoreSession();
+
+    window.addEventListener("beforeunload", handleBeforeUnload);
 
     OnFileDrop((_x: number, _y: number, paths: string[]) => {
       applyDroppedPaths(paths);
@@ -111,6 +205,9 @@
   });
 
   onDestroy(() => {
+    window.removeEventListener("beforeunload", handleBeforeUnload);
+    playbackStore.persistPlaybackNow();
+    flushSessionSave(collectSessionSnapshot());
     OnFileDropOff();
   });
 
@@ -238,13 +335,27 @@
   $effect(() => {
     // Watch searchQuery changes
     searchQuery;
-    
-    if (!currentLibraryPath) return;
-    
+
+    if (!currentLibraryPath || isRestoringSession || !sessionRestored) return;
+
     clearTimeout(searchDebounceTimer);
     searchDebounceTimer = setTimeout(() => {
       handleFilterChange();
     }, 300);
+  });
+
+  $effect(() => {
+    if (!sessionRestored || isRestoringSession) return;
+    currentLibraryPath;
+    activeTab;
+    searchQuery;
+    filters.yearMin;
+    filters.yearMax;
+    filters.sizeMin;
+    filters.sizeMax;
+    currentOffset;
+    selectedTrack?.path;
+    persistAppSession();
   });
 
   async function handleFilterChange() {
@@ -296,11 +407,19 @@
   // Reload tracks whenever we switch back to the library tab so organizer/cleaner
   // edits (renames, deletes) are reflected immediately.
   $effect(() => {
-    if (activeTab === 'library' && currentLibraryPath) {
+    const tab = activeTab;
+    if (
+      tab === "library" &&
+      previousTab !== "library" &&
+      currentLibraryPath &&
+      !isRestoringSession &&
+      sessionRestored
+    ) {
       currentOffset = 0;
       tracks = [];
       loadInitialTracks();
     }
+    previousTab = tab;
   });
 
   // Sync selectedTrack with playback when prev/next is used while on the library tab.
@@ -389,6 +508,8 @@
             {currentLibraryPath}
             {hasMoreTracks}
             {isLoadingMore}
+            {initialScrollIndex}
+            onInitialScrollDone={() => (initialScrollIndex = null)}
             onSelectTrack={(track) => (selectedTrack = track)}
             onLoadMore={loadMoreTracks}
           />

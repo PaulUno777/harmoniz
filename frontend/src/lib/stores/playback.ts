@@ -1,7 +1,13 @@
 import { writable } from "svelte/store";
 import type { Track } from "../types";
+import {
+  debouncedSaveSession,
+  flushSessionSave,
+  type LoopMode,
+  type PersistedPlayback,
+} from "./session";
 
-type LoopMode = 'none' | 'one' | 'all'
+export type { LoopMode };
 
 interface PlaybackState {
   currentTrack: Track | null;
@@ -84,6 +90,30 @@ function createPlaybackStore() {
   let audioElement: HTMLAudioElement | null = null;
   let abortController: AbortController | null = null;
 
+  function getPersistedPlayback(): PersistedPlayback | null {
+    const state = getState();
+    if (!state.currentTrack?.path) return null;
+    return {
+      trackPath: state.currentTrack.path,
+      currentTime: state.currentTime,
+      volume: state.volume,
+      isMuted: state.isMuted,
+      loopMode: state.loopMode,
+      shuffleMode: state.shuffleMode,
+    };
+  }
+
+  function schedulePlaybackPersist() {
+    const playback = getPersistedPlayback();
+    if (!playback) return;
+    debouncedSaveSession({ playback }, 2000);
+  }
+
+  function persistPlaybackNow() {
+    const playback = getPersistedPlayback();
+    if (playback) flushSessionSave({ playback });
+  }
+
   function initAudio() {
     if (audioElement) return audioElement;
 
@@ -100,6 +130,7 @@ function createPlaybackStore() {
           ...state,
           currentTime: audioElement?.currentTime ?? 0,
         }));
+        schedulePlaybackPersist();
       },
       { signal },
     );
@@ -155,6 +186,51 @@ function createPlaybackStore() {
     audio.play().catch((e) => console.error("Failed to play audio:", e))
   }
 
+  function restore(
+    track: Track,
+    playlist: Track[],
+    opts: Omit<PersistedPlayback, "trackPath">,
+  ) {
+    const audio = initAudio();
+    const index = playlist.findIndex((t) => t.path === track.path);
+    const activeIndex = index >= 0 ? index : 0;
+
+    update((s) => ({
+      ...s,
+      currentTrack: track,
+      playlist: playlist.length > 0 ? playlist : [track],
+      currentIndex: activeIndex,
+      isPlaying: false,
+      currentTime: opts.currentTime,
+      volume: opts.volume,
+      isMuted: opts.isMuted,
+      loopMode: opts.loopMode,
+      shuffleMode: opts.shuffleMode,
+      shuffledPlaylist: opts.shuffleMode
+        ? smartShuffle(playlist.length > 0 ? playlist : [track], track)
+        : [],
+    }));
+
+    audio.volume = opts.isMuted ? 0 : opts.volume;
+    const streamUrl = `/stream?path=${encodeURIComponent(track.path)}`;
+    audio.src = streamUrl;
+    audio.load();
+
+    const seekTime = opts.currentTime;
+    const onLoaded = () => {
+      if (seekTime > 0) {
+        audio.currentTime = Math.min(seekTime, audio.duration || seekTime);
+      }
+      update((s) => ({
+        ...s,
+        currentTime: audio.currentTime,
+        duration: audio.duration || 0,
+      }));
+      audio.removeEventListener("loadedmetadata", onLoaded);
+    };
+    audio.addEventListener("loadedmetadata", onLoaded);
+  }
+
   function play(track: Track, playlist?: Track[]) {
     const audio = initAudio();
 
@@ -190,6 +266,7 @@ function createPlaybackStore() {
     audio.play().catch((error) => {
       console.error("Failed to play audio:", error);
     });
+    persistPlaybackNow();
   }
 
   function pause() {
@@ -234,6 +311,7 @@ function createPlaybackStore() {
       volume: clampedVolume,
       isMuted: clampedVolume === 0 ? true : state.isMuted,
     }));
+    persistPlaybackNow();
   }
 
   function toggleMute() {
@@ -246,6 +324,7 @@ function createPlaybackStore() {
       audioElement.volume = 0;
       update((s) => ({ ...s, isMuted: true }));
     }
+    persistPlaybackNow();
   }
 
   const RESTART_THRESHOLD_SEC = 3;
@@ -298,6 +377,7 @@ function createPlaybackStore() {
       const next: LoopMode = s.loopMode === 'none' ? 'all' : s.loopMode === 'all' ? 'one' : 'none'
       return { ...s, loopMode: next }
     })
+    persistPlaybackNow();
   }
 
   function toggleShuffle() {
@@ -309,6 +389,7 @@ function createPlaybackStore() {
       const shuffled = smartShuffle(state.playlist, state.currentTrack)
       update(s => ({ ...s, shuffleMode: true, shuffledPlaylist: shuffled, currentIndex: 0 }))
     }
+    persistPlaybackNow();
   }
 
   function cleanup() {
@@ -328,7 +409,10 @@ function createPlaybackStore() {
   return {
     subscribe,
     getState,
+    getPersistedPlayback,
+    persistPlaybackNow,
     play,
+    restore,
     pause,
     resume,
     toggle,

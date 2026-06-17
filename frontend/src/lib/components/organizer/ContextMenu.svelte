@@ -21,12 +21,12 @@
 
   let applying = false;
 
-  const fieldLabels: Record<string, string> = {
-    artist: "Artist",
-    album: "Album",
-    title: "Title",
-    year: "Year",
-    track_num: "Track #",
+  $: fieldLabels = {
+    artist: $t("artist"),
+    album: $t("album"),
+    title: $t("title"),
+    year: $t("year"),
+    track_num: $t("trackNum"),
   };
 
   const fieldOrder = ["title", "artist", "album", "year", "track_num"];
@@ -42,9 +42,9 @@
   }
 
   function sourceLabel(source: string) {
-    if (source === "path") return $t("suggestionSource_path" as any);
-    if (source === "filename") return $t("suggestionSource_filename" as any);
-    return $t("suggestionSource_neighbor" as any);
+    if (source === "path") return $t("suggestionSource_path");
+    if (source === "filename") return $t("suggestionSource_filename");
+    return $t("suggestionSource_neighbor");
   }
 
   function currentValue(key: string): string {
@@ -128,7 +128,7 @@
     <span
       class="text-[10px] font-bold uppercase tracking-wider text-text-muted"
     >
-      {$t("confidence" as any)}
+      {$t("confidence")}
     </span>
     <span
       class="ml-auto text-xs font-bold tabular-nums {suggestion.score >= 75
@@ -144,7 +144,7 @@
   <!-- Per-field suggestions -->
   {#if sortedFields.length === 0}
     <div class="px-4 py-6 text-center text-xs text-text-muted">
-      {$t("trackComplete" as any)}
+      {$t("trackComplete")}
     </div>
   {:else}
     <div class="divide-y divide-border/40 max-h-64 overflow-y-auto">
@@ -188,7 +188,7 @@
               on:click={() => handleApplySingle(key, field.value)}
               disabled={applying}
               class="shrink-0 p-1.5 rounded-md bg-accent/10 text-accent hover:bg-accent/20 transition-colors disabled:opacity-40"
-              title="Apply this field"
+              title={$t("applyThisField")}
             >
               <CheckIcon size={12} weight="bold" />
             </button>
@@ -203,7 +203,7 @@
         <div
           class="text-[10px] font-bold uppercase tracking-wider text-text-muted mb-1"
         >
-          {$t("filenameTemplate" as any)}
+          {$t("filenameTemplate")}
         </div>
         <div class="text-[11px] font-mono text-text-secondary/70 truncate">
           {filenameTemplate}
@@ -221,10 +221,10 @@
       >
         {#if applying}
           <SpinnerIcon size={12} class="animate-spin" />
-          {$t("applying" as any)}
+          {$t("applying")}
         {:else}
           <CheckIcon size={12} weight="bold" />
-          {$t("applyAllForFile" as any)}
+          {$t("applyAllForFile")}
         {/if}
       </button>
       <button

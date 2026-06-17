@@ -13,6 +13,8 @@
     currentLibraryPath: string;
     isLoadingMore: boolean; // Whether more tracks are loading
     hasMoreTracks: boolean; // Whether more tracks are available
+    initialScrollIndex?: number | null;
+    onInitialScrollDone?: () => void;
     onSelectTrack: (track: Track) => void;
     onLoadMore: () => void; // Callback to load more tracks
   }
@@ -24,6 +26,8 @@
     currentLibraryPath,
     hasMoreTracks,
     isLoadingMore,
+    initialScrollIndex = null,
+    onInitialScrollDone,
     onSelectTrack,
     onLoadMore,
   }: Props = $props();
@@ -56,6 +60,16 @@
     if (!selectedTrack || !virtualList || tracks.length === 0) return;
     const idx = tracks.findIndex(t => t.path === selectedTrack.path);
     if (idx >= 0) virtualList.scroll({ index: idx, align: 'nearest', smoothScroll: true });
+  });
+
+  // Fallback scroll position when restoring without a selected track.
+  $effect(() => {
+    if (initialScrollIndex == null || !virtualList || tracks.length === 0) return;
+    const idx = Math.min(initialScrollIndex, tracks.length - 1);
+    if (idx >= 0) {
+      virtualList.scroll({ index: idx, align: 'start', smoothScroll: false });
+    }
+    onInitialScrollDone?.();
   });
 
   // Estimated item height (matches ROW_HEIGHT from previous implementation)

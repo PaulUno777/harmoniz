@@ -142,13 +142,16 @@
     return "text-text-muted";
   }
 
-  const fieldLabels: Record<string, string> = {
-    artist: "Artist",
-    title: "Title",
-    album: "Album",
-    year: "Year",
-    track_num: "Track #",
+  $: fieldLabels = {
+    artist: tr("artist"),
+    title: tr("title"),
+    album: tr("album"),
+    year: tr("year"),
+    track_num: tr("trackNum"),
   };
+
+  $: saveNChangesText = (n: number) =>
+    tr("saveNChangesQuestion").replace("{n}", String(n));
 
   const filenameTemplate = organizer.filenameTemplate;
 
@@ -232,7 +235,7 @@
       <MusicNoteSimpleIcon size={32} weight="thin" class="text-text-muted/30" />
     </div>
     <p class="text-xs text-text-muted/60 leading-relaxed">
-      Select a track to view<br />and apply suggestions
+      {tr("selectTrackToViewSuggestions")}
     </p>
   </div>
 {:else}
@@ -242,13 +245,13 @@
       <h2
         class="text-[11px] font-bold uppercase tracking-wider text-text-secondary opacity-60"
       >
-        Suggestions
+        {tr("suggestions")}
       </h2>
       <div class="flex items-center gap-1">
         <!-- Play/pause to audition before applying -->
         <button
           on:click={togglePlay}
-          title={isThisPlaying ? "Pause" : "Play to preview"}
+          title={isThisPlaying ? tr("pause") : tr("playToPreview")}
           class="p-1.5 rounded-lg hover:bg-white/5 transition-colors
                  {isThisPlaying
             ? 'text-accent'
@@ -287,7 +290,7 @@
             <div class="flex items-center justify-between mb-1.5">
               <span
                 class="text-[9px] font-bold uppercase tracking-wider text-text-muted/50"
-                >Confidence</span
+                >{tr("confidence")}</span
               >
               <span
                 class="text-[10px] font-bold tabular-nums
@@ -357,7 +360,7 @@
               <button
                 on:click={() => revertField("artist")}
                 class="ml-auto p-1 rounded hover:bg-white/5 text-text-muted/40 hover:text-text-muted transition-colors"
-                title="Revert"
+                title={tr("revert")}
               >
                 <ArrowCounterClockwiseIcon size={11} />
               </button>
@@ -400,7 +403,7 @@
               <button
                 on:click={() => revertField("title")}
                 class="ml-auto p-1 rounded hover:bg-white/5 text-text-muted/40 hover:text-text-muted transition-colors"
-                title="Revert"
+                title={tr("revert")}
               >
                 <ArrowCounterClockwiseIcon size={11} />
               </button>
@@ -443,7 +446,7 @@
               <button
                 on:click={() => revertField("album")}
                 class="ml-auto p-1 rounded hover:bg-white/5 text-text-muted/40 hover:text-text-muted transition-colors"
-                title="Revert"
+                title={tr("revert")}
               >
                 <ArrowCounterClockwiseIcon size={11} />
               </button>
@@ -527,7 +530,7 @@
         <!-- Current filename (read-only) -->
         <div>
           <span class="field-label flex items-center gap-1 mb-1">
-            <FolderIcon size={10} />Current file
+            <FolderIcon size={10} />{tr("currentFile")}
           </span>
           <div
             class="px-3 py-1.5 text-[11px] font-mono text-text-muted/50
@@ -542,7 +545,7 @@
         {#if suggestedFilename && suggestedFilename !== suggestion.track.filename}
           <div>
             <span class="field-label flex items-center gap-1 mb-1">
-              <FolderIcon size={10} />Suggested name
+              <FolderIcon size={10} />{tr("suggestedName")}
             </span>
             <div
               class="px-3 py-1.5 text-[11px] font-mono text-accent/90
@@ -552,7 +555,7 @@
             </div>
             {#if $filenameTemplate.includes("/")}
               <p class="text-[9px] text-text-muted/40 mt-1">
-                File will be moved into this subfolder on save
+                {tr("fileWillBeMovedHint")}
               </p>
             {/if}
           </div>
@@ -567,10 +570,10 @@
               class="text-green-400/60"
             />
             <p class="text-xs text-green-400/70 font-medium">
-              Metadata looks good
+              {tr("metadataLooksGood")}
             </p>
             <p class="text-[10px] text-text-muted/40">
-              You can still edit fields manually above
+              {tr("canEditManually")}
             </p>
           </div>
         {/if}
@@ -585,11 +588,7 @@
           class="mb-3 rounded-xl bg-background border border-border/50 p-3 space-y-1.5"
         >
           <p class="text-xs font-bold text-text-primary">
-            Save {Object.keys(changedFields).length} change{Object.keys(
-              changedFields,
-            ).length !== 1
-              ? "s"
-              : ""}?
+            {saveNChangesText(Object.keys(changedFields).length)}
           </p>
           {#each Object.entries(changedFields) as [key, ch]}
             <div class="flex items-center gap-2 text-[10px] text-text-muted">
@@ -598,11 +597,11 @@
                 >{fieldLabels[key] ?? key}</span
               >
               <span class="line-through opacity-40 truncate max-w-[70px]"
-                >{ch.from || "(empty)"}</span
+                >{ch.from || tr("empty")}</span
               >
               <span class="opacity-30 shrink-0">→</span>
               <span class="text-text-primary font-semibold truncate"
-                >{ch.to || "(empty)"}</span
+                >{ch.to || tr("empty")}</span
               >
             </div>
           {/each}
@@ -617,10 +616,10 @@
           >
             {#if applying}
               <SpinnerIcon size={14} class="animate-spin" />
-              Saving…
+              {tr("saving")}
             {:else}
               <FloppyDiskIcon size={14} weight="bold" />
-              Confirm & Save
+              {tr("confirmAndSave")}
             {/if}
           </button>
           <button
@@ -629,7 +628,7 @@
             class="px-4 py-2 text-sm text-text-secondary hover:text-text-primary rounded-lg
                    hover:bg-white/5 transition-colors disabled:opacity-50"
           >
-            Cancel
+            {tr("cancel")}
           </button>
         </div>
       {:else}
@@ -646,14 +645,10 @@
           >
             {#if !hasChanges}
               <CheckCircleIcon size={16} weight="bold" />
-              No Changes
+              {tr("noChanges")}
             {:else}
               <FloppyDiskIcon size={16} weight="bold" />
-              Save {Object.keys(changedFields).length} Change{Object.keys(
-                changedFields,
-              ).length !== 1
-                ? "s"
-                : ""}
+              {tr("saveChanges")} ({Object.keys(changedFields).length})
             {/if}
           </button>
           {#if hasChanges}
@@ -661,7 +656,7 @@
               on:click={revertAll}
               class="shrink-0 px-3 py-2 text-text-muted hover:text-text-primary rounded-lg
                      hover:bg-white/5 transition-colors"
-              title="Revert all changes"
+              title={tr("revertAll")}
             >
               <ArrowCounterClockwiseIcon size={16} />
             </button>

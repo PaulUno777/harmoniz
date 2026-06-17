@@ -1,8 +1,19 @@
 import { writable, derived } from "svelte/store";
+import {
+  loadSession,
+  saveSession,
+  type Locale,
+} from "./session";
 
-export type Locale = "en" | "fr";
+export type { Locale };
 
-export const locale = writable<Locale>("en");
+const savedLocale = loadSession().locale;
+export const locale = writable<Locale>(savedLocale);
+
+export function setLocale(value: Locale) {
+  locale.set(value);
+  saveSession({ locale: value });
+}
 
 const translations = {
   en: {
@@ -120,6 +131,25 @@ const translations = {
     templatePreviewTitle: "Filename preview",
     closePreview: "Close",
     organizerEmptyHint: "Run analysis to see intelligent metadata suggestions for your files.",
+
+    // OrganizerDetailPanel & ContextMenu
+    selectTrackToViewSuggestions: "Select a track to view and apply suggestions",
+    suggestions: "Suggestions",
+    playToPreview: "Play to preview",
+    pause: "Pause",
+    revert: "Revert",
+    revertAll: "Revert all changes",
+    currentFile: "Current file",
+    suggestedName: "Suggested name",
+    fileWillBeMovedHint: "File will be moved into this subfolder on save",
+    metadataLooksGood: "Metadata looks good",
+    canEditManually: "You can still edit fields manually above",
+    confirmAndSave: "Confirm & Save",
+    cancel: "Cancel",
+    noChanges: "No changes",
+    empty: "(empty)",
+    saveNChangesQuestion: "Save {n} change(s)?",
+    applyThisField: "Apply this field",
   },
   fr: {
     library: "Bibliothèque",
@@ -239,6 +269,25 @@ const translations = {
     templatePreviewTitle: "Aperçu des noms de fichiers",
     closePreview: "Fermer",
     organizerEmptyHint: "Lancez l'analyse pour voir les suggestions intelligentes de métadonnées.",
+
+    // OrganizerDetailPanel & ContextMenu
+    selectTrackToViewSuggestions: "Sélectionnez un morceau pour afficher et appliquer les suggestions",
+    suggestions: "Suggestions",
+    playToPreview: "Écouter pour prévisualiser",
+    pause: "Pause",
+    revert: "Annuler la modification",
+    revertAll: "Annuler toutes les modifications",
+    currentFile: "Fichier actuel",
+    suggestedName: "Nom suggéré",
+    fileWillBeMovedHint: "Le fichier sera déplacé dans ce sous-dossier lors de l'enregistrement",
+    metadataLooksGood: "Les métadonnées semblent correctes",
+    canEditManually: "Vous pouvez toujours modifier les champs manuellement ci-dessus",
+    confirmAndSave: "Confirmer et enregistrer",
+    cancel: "Annuler",
+    noChanges: "Aucune modification",
+    empty: "(vide)",
+    saveNChangesQuestion: "Enregistrer {n} modification(s) ?",
+    applyThisField: "Appliquer ce champ",
   },
 };
 
