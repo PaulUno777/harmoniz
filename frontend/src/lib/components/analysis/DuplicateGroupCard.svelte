@@ -5,26 +5,30 @@
   import { StarIcon, TrashIcon, CheckIcon, SpinnerIcon } from "phosphor-svelte";
 
   interface Props {
-    group: Track[];
-    qualityScore: (t: Track) => number;
+    tracks: Track[];
+    recommendedKeepId: number;
     onDelete: (id: number) => Promise<void>;
     onKeepThis: (keepId: number) => Promise<void>;
   }
 
-  let { group, qualityScore, onDelete, onKeepThis }: Props = $props();
+  let { tracks, recommendedKeepId, onDelete, onKeepThis }: Props = $props();
 
   let expanded  = $state(true);
   let resolving = $state(false);
 
-  // Sort group so recommended (highest quality) is always first
+  // Sort so recommended (backend-scored highest quality) is always first
   const ranked = $derived.by(() =>
-    [...group].sort((a, b) => qualityScore(b) - qualityScore(a))
+    [...tracks].sort((a, b) => {
+      if (a.id === recommendedKeepId) return -1;
+      if (b.id === recommendedKeepId) return 1;
+      return 0;
+    })
   );
 
   const recommended = $derived(ranked[0]);
 
   const saveBytes = $derived(
-    group.length > 1 ? (group.length - 1) * (group[0]?.size ?? 0) : 0
+    tracks.length > 1 ? (tracks.length - 1) * (tracks[0]?.size ?? 0) : 0
   );
 
   async function handleKeepThis(keepId: number) {
@@ -71,11 +75,11 @@
       class="flex items-center gap-3 min-w-0 text-left flex-1"
       onclick={() => (expanded = !expanded)}
     >
-      <span class="text-text-primary font-medium text-sm truncate" title={group[0]?.filename ?? group[0]?.path}>
-        {group[0]?.filename ?? group[0]?.title ?? group[0]?.path ?? "—"}
+      <span class="text-text-primary font-medium text-sm truncate" title={tracks[0]?.filename ?? tracks[0]?.path}>
+        {tracks[0]?.filename ?? tracks[0]?.title ?? tracks[0]?.path ?? "—"}
       </span>
       <span class="text-xs text-text-muted shrink-0 bg-white/5 px-2 py-0.5 rounded-full">
-        {$t("andNDuplicates").replace("{n}", String(group.length - 1))}
+        {$t("andNDuplicates").replace("{n}", String(tracks.length - 1))}
       </span>
       {#if saveBytes > 0}
         <span class="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-accent/15 text-accent shrink-0">
@@ -98,8 +102,8 @@
         </button>
       {/if}
       <span class="text-text-muted text-xs">
-        {#if group[0]?.hash_partial}
-          {group[0].hash_partial.slice(0, 8)}…
+        {#if tracks[0]?.hash_partial}
+          {tracks[0].hash_partial.slice(0, 8)}…
         {/if}
       </span>
     </div>

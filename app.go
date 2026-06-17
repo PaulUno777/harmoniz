@@ -9,6 +9,8 @@ import (
 	"harmoniz/internal/core/services/organize"
 	"harmoniz/internal/core/services/scanner"
 	"harmoniz/internal/logger"
+	"harmoniz/internal/update"
+	"harmoniz/internal/version"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -65,6 +67,21 @@ func (a *App) ScanLibrary(root string) error {
 		runtime.EventsEmit(a.ctx, "scan:done", root)
 	}
 	return err
+}
+
+// RescanLibrary forces an immediate delta scan regardless of when the library was last scanned.
+// Unlike ScanLibrary, it always walks the filesystem and adds any new or changed files.
+// Use this before duplicate detection to ensure recently added copies are in the database.
+func (a *App) RescanLibrary(root string) error {
+	if a.ctx == nil {
+		a.ctx = context.Background()
+	}
+	logger.Log.Info("RescanLibrary (force) called", "root", root)
+	if err := a.scanner.Scan(a.ctx, root); err != nil {
+		return err
+	}
+	runtime.EventsEmit(a.ctx, "scan:done", root)
+	return nil
 }
 
 // OpenFolderDialog opens the native directory picker and returns the selected path (empty if cancelled).
@@ -128,8 +145,8 @@ func (a *App) AnalyzeArtists(root string) ([]domain.ArtistSuggestion, error) {
 }
 
 // DetectDuplicates returns groups of byte-identical tracks under the given root.
-// root is the current library path; use "" to scan the entire database.
-func (a *App) DetectDuplicates(root string) ([][]domain.Track, error) {
+// Each group includes the recommended track to keep based on metadata quality.
+func (a *App) DetectDuplicates(root string) ([]domain.DuplicateGroup, error) {
 	if a.ctx == nil {
 		a.ctx = context.Background()
 	}
@@ -208,12 +225,80 @@ func (a *App) DeleteTrack(id uint64) error {
 	return a.repo.SoftDelete(a.ctx, track.ID, "USER_DUPLICATE")
 }
 
+// OrganizeSummary is emitted as the organize:analyze_done Wails event payload.
+type OrganizeSummary struct {
+	Total           int   `json:"total"`
+	WithSuggestions int   `json:"with_suggestions"`
+	HighConfidence  int   `json:"high_confidence"`
+	RegistryArtists int   `json:"registry_artists"`
+	DurationMs      int64 `json:"duration_ms"`
+}
+
 // AnalyzeForOrganize analyzes all tracks under root and returns per-track metadata suggestions.
+// Emits organize:analyze_done with summary stats after completion.
 func (a *App) AnalyzeForOrganize(root string) ([]domain.OrganizerSuggestion, error) {
 	if a.ctx == nil {
 		a.ctx = context.Background()
 	}
-	return a.suggester.AnalyzeRoot(a.ctx, root)
+	start := time.Now()
+	suggestions, registryArtists, err := a.suggester.AnalyzeRoot(a.ctx, root)
+	if err != nil {
+		return nil, err
+	}
+
+	withSuggs, highConf := 0, 0
+	for _, s := range suggestions {
+		if len(s.Fields) > 0 {
+			withSuggs++
+		}
+		if s.Score >= 75 {
+			highConf++
+		}
+	}
+	runtime.EventsEmit(a.ctx, "organize:analyze_done", OrganizeSummary{
+		Total:           len(suggestions),
+		WithSuggestions: withSuggs,
+		HighConfidence:  highConf,
+		RegistryArtists: registryArtists,
+		DurationMs:      time.Since(start).Milliseconds(),
+	})
+
+	if organize.IsDebugMode() {
+		lowConf := []organize.LowConfWarn{}
+		for _, s := range suggestions {
+			for field, f := range s.Fields {
+				if f.Confidence < 0.55 {
+					lowConf = append(lowConf, organize.LowConfWarn{
+						TrackID:    s.TrackID,
+						Field:      field,
+						Value:      f.Value,
+						Confidence: f.Confidence,
+						Reason:     "low confidence",
+					})
+				}
+			}
+		}
+		report := organize.OrganizeReport{
+			RunID:      fmt.Sprintf("%d", time.Now().UnixNano()),
+			Root:       root,
+			At:         time.Now().UTC().Format(time.RFC3339),
+			DurationMs: time.Since(start).Milliseconds(),
+			Stats: organize.ReportStats{
+				TracksAnalyzed:       len(suggestions),
+				SuggestionsGenerated: withSuggs,
+				HighConfidence:       highConf,
+				RegistryArtists:      registryArtists,
+			},
+			LowConfidenceWarnings: lowConf,
+		}
+		if path, writeErr := organize.WriteDebugReport(report); writeErr != nil {
+			logger.Log.Warn("Debug report write failed", "error", writeErr)
+		} else {
+			logger.Log.Info("Debug report written", "path", path)
+		}
+	}
+
+	return suggestions, nil
 }
 
 // ApplyOrganizerSuggestion applies selected metadata fields to a track (non-destructive).
@@ -292,7 +377,7 @@ func (a *App) ApplyOrganizerSuggestion(trackID uint64, artist, title, album stri
 // ApplyAllHighConfidence applies high-confidence suggestions (score >= minConfidence, fields >= 0.75)
 // across the entire root. Returns count of successfully updated tracks.
 func (a *App) ApplyAllHighConfidence(root string, minConfidence float64, filenameTemplate string) (int, error) {
-	suggestions, err := a.AnalyzeForOrganize(root)
+	suggestions, _, err := a.suggester.AnalyzeRoot(a.ctx, root)
 	if err != nil {
 		return 0, err
 	}
@@ -379,4 +464,53 @@ func highConfInt(fields map[string]domain.FieldSuggestion, key string, threshold
 		return n
 	}
 	return 0
+}
+
+// GetLastDebugReport returns the JSON content of the most recent organize debug report,
+// or an empty string if none exists or HARMONIZ_DEBUG was never set.
+func (a *App) GetLastDebugReport() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ""
+	}
+	dir := filepath.Join(home, ".harmoniz", "debug")
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return ""
+	}
+	var latest string
+	for _, e := range entries {
+		name := e.Name()
+		if strings.HasPrefix(name, "organize-") && strings.HasSuffix(name, ".json") {
+			if name > latest {
+				latest = name
+			}
+		}
+	}
+	if latest == "" {
+		return ""
+	}
+	data, err := os.ReadFile(filepath.Join(dir, latest))
+	if err != nil {
+		return ""
+	}
+	return string(data)
+}
+
+// OpenDebugFolder opens the Harmoniz debug directory in Finder.
+func (a *App) OpenDebugFolder() {
+	home, _ := os.UserHomeDir()
+	dir := filepath.Join(home, ".harmoniz", "debug")
+	_ = os.MkdirAll(dir, 0o755)
+	_ = exec.Command("open", dir).Start()
+}
+
+// GetAppVersion returns the running app version (semver without "v" prefix).
+func (a *App) GetAppVersion() string {
+	return version.Version
+}
+
+// CheckForUpdates queries GitHub for the latest release and compares versions.
+func (a *App) CheckForUpdates() (update.Result, error) {
+	return update.Check()
 }

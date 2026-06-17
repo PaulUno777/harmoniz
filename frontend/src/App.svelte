@@ -13,7 +13,7 @@
   import { theme } from "./lib/stores/theme";
   import { t } from "./lib/stores/i18n";
   import { get } from "svelte/store";
-  import type { Track, TabId } from "./lib/types";
+  import type { Track, TabId, DuplicateGroup } from "./lib/types";
 
   // @ts-ignore
   import {
@@ -34,6 +34,7 @@
   import { organizer } from "./lib/stores/organizer";
   import { playbackStore } from "./lib/stores/playback";
   import { toast } from "./lib/stores/toast";
+  import { updateStore } from "./lib/stores/update";
   import {
     loadSession,
     debouncedSaveSession,
@@ -42,6 +43,7 @@
     type PersistedSession,
   } from "./lib/stores/session";
 
+  import { devMode } from "./lib/stores/devMode";
   // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
   const orgSelectedSuggestion = organizer.selectedSuggestion
   import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
@@ -193,9 +195,21 @@
     updateWindowTitle(currentLibraryPath);
   });
 
+  async function runStartupUpdateCheck() {
+    await updateStore.init();
+    await updateStore.check(true);
+    if (updateStore.isDismissed()) return;
+    const u = get(updateStore);
+    if (u.updateAvailable && u.latestVersion) {
+      toast.warning(
+        get(t)("updateAvailable").replace("{version}", u.latestVersion),
+      );
+    }
+  }
+
   onMount(() => {
     theme.init();
-    void restoreSession();
+    void restoreSession().then(() => runStartupUpdateCheck());
 
     window.addEventListener("beforeunload", handleBeforeUnload);
 
@@ -435,6 +449,17 @@
     return () => unsub()
   })
 
+  // Ctrl+Shift+D toggles dev mode (shows suggestion trace in OrganizerDetailPanel).
+  $effect(() => {
+    function onKeydown(e: KeyboardEvent) {
+      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
+        devMode.update(v => !v)
+      }
+    }
+    window.addEventListener('keydown', onKeydown)
+    return () => window.removeEventListener('keydown', onKeydown)
+  })
+
   async function handleDeleteTrack(id: number) {
     await DeleteTrack(id);
     analysis.removeFromGroup(id);
@@ -450,7 +475,7 @@
         DetectDuplicates(currentLibraryPath),
       ]);
       analysis.setArtistSuggestions((suggestions ?? []) as import("./lib/types").ArtistSuggestion[]);
-      analysis.setDuplicates((duplicates ?? []) as Track[][]);
+      analysis.setDuplicates((duplicates ?? []) as DuplicateGroup[]);
       analysis.setHasRunOnce(true);
     } catch (e) {
       analysis.setError(e instanceof Error ? e.message : String(e));

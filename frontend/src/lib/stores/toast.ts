@@ -22,8 +22,8 @@ function remove(id: string) {
 
 export const toast = {
   subscribe,
-  success: (message: string) => add('success', message),
-  error: (message: string) => add('error', message),
-  warning: (message: string) => add('warning', message),
+  success: (message: string, duration?: number) => add('success', message, duration),
+  error: (message: string, duration?: number) => add('error', message, duration),
+  warning: (message: string, duration?: number) => add('warning', message, duration ?? 6000),
   remove,
 }

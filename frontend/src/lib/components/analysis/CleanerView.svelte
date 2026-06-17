@@ -5,8 +5,8 @@
   import DuplicateGroupCard from "./DuplicateGroupCard.svelte";
   import { ArrowClockwiseIcon, SpinnerIcon, FolderIcon, CheckCircleIcon } from "phosphor-svelte";
   // @ts-ignore
-  import { DetectDuplicates } from "../../../../wailsjs/go/main/App.js";
-  import type { Track } from "../../types";
+  import { DetectDuplicates, RescanLibrary } from "../../../../wailsjs/go/main/App.js";
+  import type { DuplicateGroup } from "../../types";
 
   interface Props {
     onBrowse: () => void;
@@ -33,6 +33,8 @@
     analysis.setLoading(true);
     analysis.setError(null);
     try {
+      // Force a delta scan first so copies added since last scan are picked up.
+      await RescanLibrary(libraryPath);
       const groups = await DetectDuplicates(libraryPath);
       analysis.setDuplicates(groups ?? []);
       analysis.setHasRunOnce(true);
@@ -52,13 +54,12 @@
     let resolved = 0;
     try {
       for (const group of [...$duplicateGroups]) {
-        const sorted = [...group].sort((a, b) => qualityScore(b) - qualityScore(a));
-        for (const track of sorted.slice(1)) {
-          if (track.id !== undefined) {
+        for (const track of group.tracks) {
+          if (track.id !== group.recommended_keep_id && track.id !== undefined) {
             await onDeleteTrack(track.id);
           }
         }
-        analysis.resolveGroup(group[0]?.path ?? "");
+        analysis.resolveGroup(group.tracks[0]?.path ?? "");
         resolved++;
       }
       toast.success(`Resolved ${resolved} duplicate group${resolved !== 1 ? "s" : ""}`);
@@ -69,31 +70,19 @@
     }
   }
 
-  function qualityScore(t: Track): number {
-    let s = 0;
-    if (t.title)      s += 10;
-    if (t.artist_raw) s += 10;
-    if (t.album_raw)  s += 10;
-    if (t.year)       s += 5;
-    if (t.track_num)  s += 5;
-    s += (t.bitrate ?? 0) / 100;
-    s -= t.path.length * 0.01;
-    return s;
-  }
-
-  async function handleKeepThis(keepId: number, group: Track[]) {
-    for (const track of group) {
+  async function handleKeepThis(keepId: number, group: DuplicateGroup) {
+    for (const track of group.tracks) {
       if (track.id !== keepId && track.id !== undefined) {
         await onDeleteTrack(track.id);
       }
     }
-    analysis.resolveGroup(group[0]?.path ?? "");
+    analysis.resolveGroup(group.tracks[0]?.path ?? "");
   }
 
   const totalSaveable = $derived(
     $duplicateGroups.reduce((sum, g) => {
-      const f = g[0];
-      return sum + (f && g.length > 1 ? (g.length - 1) * (f.size ?? 0) : 0);
+      const f = g.tracks[0];
+      return sum + (f && g.tracks.length > 1 ? (g.tracks.length - 1) * (f.size ?? 0) : 0);
     }, 0)
   );
 
@@ -157,6 +146,7 @@
         <span class="text-[10px] font-bold text-text-muted uppercase tracking-wider">
           {$duplicateGroups.length} group{$duplicateGroups.length !== 1 ? "s" : ""}
         </span>
+
         <span class="text-[10px] text-text-muted/40">·</span>
         <span class="text-[10px] text-accent font-bold">
           {formatBytes(totalSaveable)} recoverable
@@ -214,10 +204,10 @@
 
     {:else if $duplicateGroups.length > 0}
       <div class="space-y-3">
-        {#each $duplicateGroups as group (group[0]?.path ?? group.length.toString())}
+        {#each $duplicateGroups as group (group.tracks[0]?.path ?? group.tracks.length.toString())}
           <DuplicateGroupCard
-            {group}
-            {qualityScore}
+            tracks={group.tracks}
+            recommendedKeepId={group.recommended_keep_id}
             onDelete={onDeleteTrack}
             onKeepThis={(id) => handleKeepThis(id, group)}
           />

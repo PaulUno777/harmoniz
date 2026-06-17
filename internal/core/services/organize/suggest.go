@@ -24,12 +24,20 @@ func NewSuggestionService(repo ports.TrackRepository) *SuggestionService {
 	return &SuggestionService{repo: repo}
 }
 
+// LibraryIndex holds cross-directory inferences built once before the per-track loop.
+type LibraryIndex struct {
+	Registry *ArtistRegistry
+}
+
 // AnalyzeRoot analyzes all tracks under root and returns per-track suggestions.
-func (s *SuggestionService) AnalyzeRoot(ctx context.Context, root string) ([]domain.OrganizerSuggestion, error) {
+// The second return value is the number of unique artists found in the registry.
+func (s *SuggestionService) AnalyzeRoot(ctx context.Context, root string) ([]domain.OrganizerSuggestion, int, error) {
 	tracks, _, err := s.repo.ListTracks(ctx, domain.TrackFilter{Root: root, Limit: 50000})
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
+
+	idx := &LibraryIndex{Registry: BuildArtistRegistry(tracks)}
 
 	byDir := map[string][]domain.Track{}
 	for _, t := range tracks {
@@ -42,10 +50,10 @@ func (s *SuggestionService) AnalyzeRoot(ctx context.Context, root string) ([]dom
 	suggestions := make([]domain.OrganizerSuggestion, 0, len(tracks))
 	for _, t := range tracks {
 		dir := filepath.Dir(t.Path)
-		sugg := s.buildSuggestion(t, dirInfos[dir])
+		sugg := s.buildSuggestion(t, dirInfos[dir], idx)
 		suggestions = append(suggestions, sugg)
 	}
-	return suggestions, nil
+	return suggestions, idx.Registry.Size(), nil
 }
 
 // dirMeta holds path-inferred and tag-voted metadata for a single directory.
@@ -58,6 +66,7 @@ type dirMeta struct {
 	tagConfidence   float64
 	inferredArtist  string  // cross-file canonical artist inferred from filenames
 	inferredArtConf float64
+	isCompilation   bool    // >3 distinct tag artists → VA/compilation directory
 }
 
 func (s *SuggestionService) computeDirInfos(root string, byDir map[string][]domain.Track) map[string]dirMeta {
@@ -105,6 +114,9 @@ func (s *SuggestionService) computeDirInfos(root string, byDir map[string][]doma
 		}
 		total := len(tracks)
 
+		if len(artistVotes) > 3 {
+			info.isCompilation = true
+		}
 		if artist, count := topVote(artistVotes); count > 0 {
 			thresh := math.Max(1, float64(total)*0.15)
 			if float64(count) >= thresh {
@@ -241,7 +253,7 @@ func inferCanonicalArtist(tracks []domain.Track, folderHint string) (string, flo
 	return normToRaw[best.norm], conf
 }
 
-func (s *SuggestionService) buildSuggestion(t domain.Track, info dirMeta) domain.OrganizerSuggestion {
+func (s *SuggestionService) buildSuggestion(t domain.Track, info dirMeta, idx *LibraryIndex) domain.OrganizerSuggestion {
 	fields := map[string]domain.FieldSuggestion{}
 	issues := []string{}
 
@@ -250,19 +262,83 @@ func (s *SuggestionService) buildSuggestion(t domain.Track, info dirMeta) domain
 	// --- Artist ---
 	existingArtist := strings.TrimSpace(t.ArtistRaw)
 	if existingArtist == "" || isPlaceholderArtist(existingArtist) {
-		// Missing or placeholder artist
+		type artCand struct {
+			value      string
+			confidence float64
+			source     string
+			step       string
+			input      string
+		}
+		var cands []artCand
+
+		// 1. Sibling tag vote
 		if info.tagArtist != "" {
-			fields["artist"] = domain.FieldSuggestion{Value: info.tagArtist, Confidence: info.tagConfidence, Source: "neighbor"}
-		} else if info.inferredArtist != "" {
-			fields["artist"] = domain.FieldSuggestion{Value: info.inferredArtist, Confidence: info.inferredArtConf, Source: "filename"}
-		} else if parsed.artist != "" {
+			cands = append(cands, artCand{info.tagArtist, info.tagConfidence, "neighbor", "neighbor", "sibling_tags"})
+		}
+		// 2. Cross-file filename canonical
+		if info.inferredArtist != "" {
+			cands = append(cands, artCand{info.inferredArtist, info.inferredArtConf, "filename", "filename_infer", t.Filename})
+		}
+		// 3. Single-file filename parse
+		if parsed.artist != "" {
 			conf := 0.65
 			if info.artistCandidate != "" && strings.Contains(normStr(parsed.artist), normStr(info.artistCandidate)) {
 				conf = 0.80
 			}
-			fields["artist"] = domain.FieldSuggestion{Value: parsed.artist, Confidence: conf, Source: "filename"}
-		} else if info.artistCandidate != "" {
-			fields["artist"] = domain.FieldSuggestion{Value: info.artistCandidate, Confidence: info.pathConfidence, Source: "path"}
+			cands = append(cands, artCand{parsed.artist, conf, "filename", "filename_parse", t.Filename})
+		}
+		// 4. Library registry (skip for VA/compilation directories)
+		if !info.isCompilation && idx != nil && idx.Registry != nil {
+			if pn := normStr(parsed.artist); pn != "" {
+				if e, conf := idx.Registry.ExactLookup(pn); e != nil {
+					cands = append(cands, artCand{e.Canonical, conf, "library", "library_exact", pn})
+				}
+			}
+			hint := parsed.artist
+			if hint == "" {
+				hint = parsed.title
+			}
+			if hint != "" {
+				if e, conf := idx.Registry.FuzzyLookup(hint); e != nil {
+					cands = append(cands, artCand{e.Canonical, conf, "library", "library_fuzzy", hint})
+				}
+			}
+		}
+		// 5. Path walk
+		if info.artistCandidate != "" {
+			cands = append(cands, artCand{info.artistCandidate, info.pathConfidence, "path", "path", filepath.Dir(t.Path)})
+		}
+
+		// Pick highest-confidence candidate
+		bestIdx := -1
+		for i, c := range cands {
+			if bestIdx < 0 || c.confidence > cands[bestIdx].confidence {
+				bestIdx = i
+			}
+		}
+		if bestIdx >= 0 {
+			best := cands[bestIdx]
+			trace := make([]domain.TraceStep, len(cands))
+			for i, c := range cands {
+				rejected := i != bestIdx
+				step := domain.TraceStep{
+					Step:       c.step,
+					Input:      c.input,
+					Result:     c.value,
+					Confidence: c.confidence,
+					Rejected:   rejected,
+				}
+				if rejected {
+					step.Reason = "lower confidence"
+				}
+				trace[i] = step
+			}
+			fields["artist"] = domain.FieldSuggestion{
+				Value:      best.value,
+				Confidence: best.confidence,
+				Source:     best.source,
+				Trace:      trace,
+			}
 		}
 		issues = append(issues, "Missing artist")
 	} else {
@@ -357,10 +433,11 @@ func (s *SuggestionService) buildSuggestion(t domain.Track, info dirMeta) domain
 }
 
 // normalizeExistingArtist suggests a better form for a malformed artist string.
-// If tagArtist is provided and looks better (longer/more complete), prefer it.
+// If tagArtist is a genuinely different (richer) form, prefer it.
 func normalizeExistingArtist(existing, tagArtist string) string {
-	// If there's a consensus tag artist and it contains the same name, prefer it
-	if tagArtist != "" && strings.Contains(normStr(tagArtist), normStr(existing)) {
+	// Only prefer tagArtist if it is actually a different, longer/more complete string.
+	// Returning the same value as existing would suppress the all-caps/underscore fix below.
+	if tagArtist != "" && tagArtist != existing && strings.Contains(normStr(tagArtist), normStr(existing)) {
 		return tagArtist
 	}
 	// All-caps → Title Case
@@ -550,6 +627,10 @@ func parseFilename(filename string) parsedFile {
 		if num, _, ok := extractLeadingNum(p0); ok {
 			result.trackNum = num
 			result.title = normalizeText(p1)
+		} else if n, err := strconv.Atoi(strings.TrimSpace(p0)); err == nil && n > 0 && n <= 999 {
+			// purely-numeric first part: "03 - Title.mp3" → trackNum=3, not artist="03"
+			result.trackNum = n
+			result.title = normalizeText(p1)
 		} else {
 			result.artist = normalizeText(p0)
 			result.title = normalizeText(p1)
@@ -560,9 +641,19 @@ func parseFilename(filename string) parsedFile {
 			result.trackNum = num
 			result.album = normalizeText(p1)
 			result.title = normalizeText(p2)
+		} else if n, err := strconv.Atoi(strings.TrimSpace(p0)); err == nil && n > 0 && n <= 999 {
+			// "01 - Album - Title.mp3" → trackNum=1, not artist="01"
+			result.trackNum = n
+			result.album = normalizeText(p1)
+			result.title = normalizeText(p2)
 		} else if num, _, ok := extractLeadingNum(p1); ok {
 			result.artist = normalizeText(p0)
 			result.trackNum = num
+			result.title = normalizeText(p2)
+		} else if n, err := strconv.Atoi(strings.TrimSpace(p1)); err == nil && n > 0 && n <= 999 {
+			// "Artist - 02 - Title.mp3" → trackNum=2, not album="02"
+			result.artist = normalizeText(p0)
+			result.trackNum = n
 			result.title = normalizeText(p2)
 		} else {
 			result.artist = normalizeText(p0)
@@ -574,6 +665,9 @@ func parseFilename(filename string) parsedFile {
 		result.album = normalizeText(dashParts[1])
 		if num, _, ok := extractLeadingNum(dashParts[2]); ok {
 			result.trackNum = num
+		} else if n, err := strconv.Atoi(strings.TrimSpace(dashParts[2])); err == nil && n > 0 && n <= 999 {
+			// "Artist - Album - 02 - Title.mp3" → trackNum=2, not ignored
+			result.trackNum = n
 		}
 		result.title = normalizeText(dashParts[len(dashParts)-1])
 	}

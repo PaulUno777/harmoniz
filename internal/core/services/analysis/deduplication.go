@@ -3,11 +3,44 @@ package analysis
 import (
 	"context"
 	"fmt"
+	"regexp"
+
 	"harmoniz/internal/adapters/fs"
 	"harmoniz/internal/core/domain"
 	"harmoniz/internal/core/ports"
 	"harmoniz/internal/logger"
 )
+
+// copyRe matches paths where the filename ends with a copy indicator just before the extension.
+// Requires a SPACE (not underscore) before "(N)" so YouTube filenames like "_(0).mp3" are
+// not falsely penalized. Examples that match: "song (1).mp3", "song copy.mp3", "song copy 2.mp3".
+var copyRe = regexp.MustCompile(`(?i)( copy\s*\d*| \(\d+\))\.\w+$`)
+
+// QualityScore rates a track for duplicate resolution. Higher = prefer to keep.
+func QualityScore(t domain.Track) float64 {
+	var s float64
+	if t.Title != "" {
+		s += 10
+	}
+	if t.ArtistRaw != "" {
+		s += 10
+	}
+	if t.AlbumRaw != "" {
+		s += 10
+	}
+	if t.Year > 0 {
+		s += 5
+	}
+	if t.TrackNum > 0 {
+		s += 5
+	}
+	s += float64(t.Bitrate) / 100
+	s -= float64(len(t.Path)) * 0.01
+	if copyRe.MatchString(t.Path) {
+		s -= 5
+	}
+	return s
+}
 
 // DeduplicationService finds exact duplicate files via size → partial hash → full hash funnel.
 type DeduplicationService struct {
@@ -25,9 +58,9 @@ func NewDeduplicationServiceWithConfig(repo ports.TrackRepository, cfg DedupConf
 	return &DeduplicationService{repo: repo, config: cfg}
 }
 
-// DetectDuplicates returns groups of tracks that are byte-identical (same full hash).
+// DetectDuplicates returns groups of byte-identical tracks with a recommended track to keep.
 // root restricts to tracks under that path; empty = all.
-func (s *DeduplicationService) DetectDuplicates(ctx context.Context, root string) ([][]domain.Track, error) {
+func (s *DeduplicationService) DetectDuplicates(ctx context.Context, root string) ([]domain.DuplicateGroup, error) {
 	candidates, err := s.repo.GetDuplicateCandidates(ctx, root)
 	if err != nil {
 		return nil, fmt.Errorf("get duplicate candidates: %w", err)
@@ -48,7 +81,7 @@ func (s *DeduplicationService) DetectDuplicates(ctx context.Context, root string
 		maxLog = DefaultDedupConfig().MaxSizeGroupLog
 	}
 
-	var duplicates [][]domain.Track
+	var duplicates []domain.DuplicateGroup
 	for size, group := range bySize {
 		if len(group) > maxLog {
 			logger.Log.Warn("Large size group", "size", size, "count", len(group))
@@ -67,9 +100,21 @@ func (s *DeduplicationService) DetectDuplicates(ctx context.Context, root string
 				continue
 			}
 			for _, fullGroup := range byFull {
-				if len(fullGroup) > 1 {
-					duplicates = append(duplicates, fullGroup)
+				if len(fullGroup) < 2 {
+					continue
 				}
+				var bestID uint64
+				var bestScore = -999.0
+				for _, t := range fullGroup {
+					if sc := QualityScore(t); sc > bestScore {
+						bestScore = sc
+						bestID = t.ID
+					}
+				}
+				duplicates = append(duplicates, domain.DuplicateGroup{
+					Tracks:            fullGroup,
+					RecommendedKeepID: bestID,
+				})
 			}
 		}
 	}

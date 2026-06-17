@@ -23,6 +23,7 @@ export interface PersistedSession {
   listOffset: number;
   selectedTrackPath: string | null;
   playback: PersistedPlayback | null;
+  dismissedUpdateVersion?: string;
 }
 
 const STORAGE_KEY = "harmoniz.session";
@@ -103,6 +104,10 @@ function parseSession(raw: unknown): PersistedSession | null {
     selectedTrackPath:
       typeof raw.selectedTrackPath === "string" ? raw.selectedTrackPath : null,
     playback: parsePlayback(raw.playback),
+    dismissedUpdateVersion:
+      typeof raw.dismissedUpdateVersion === "string"
+        ? raw.dismissedUpdateVersion
+        : undefined,
   };
 }
 

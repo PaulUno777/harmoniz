@@ -49,4 +49,10 @@ export interface FilenamePreview {
   after: string
 }
 
+/** Phase 4 analysis: a group of byte-identical duplicate tracks with a recommended keeper */
+export interface DuplicateGroup {
+  tracks: Track[]
+  recommended_keep_id: number
+}
+
 export type TabId = 'library' | 'organizer' | 'cleaner' | 'settings'

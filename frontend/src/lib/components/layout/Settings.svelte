@@ -1,34 +1,35 @@
 <script lang="ts">
-  import { 
-    GlobeIcon, 
-    MoonIcon, 
-    SunIcon, 
-    MonitorIcon, 
-    TranslateIcon, 
-    MusicNotesIcon 
+  import {
+    GlobeIcon,
+    MoonIcon,
+    SunIcon,
+    MonitorIcon,
+    TranslateIcon,
   } from 'phosphor-svelte'
-  import { t, locale, setLocale, type Locale } from '../../stores/i18n'
+  import { t } from '../../stores/i18n'
+  import { locale, setLocale, type Locale } from '../../stores/i18n'
   import { theme } from '../../stores/theme'
+  import { updateStore } from '../../stores/update'
   import CustomSelect from '../ui/CustomSelect.svelte'
   import ThemePreviewButton from '../ui/ThemePreviewButton.svelte'
+  import logoRaw from '../../../assets/images/hamonizer_logo.svg?raw'
 
-  let isCheckingUpdates = $state(false)
-  let updateStatusKey = $state<'latestVersion' | null>(null)
-  
   const languages: { id: Locale; label: string }[] = [
     { id: 'en', label: 'English' },
     { id: 'fr', label: 'Français' },
   ]
 
   async function handleCheckUpdates() {
-    isCheckingUpdates = true
-    updateStatusKey = null
-    
-    // Simulate API call
-    await new Promise(resolve => setTimeout(resolve, 2000))
-    
-    isCheckingUpdates = false
-    updateStatusKey = 'latestVersion'
+    await updateStore.check()
+  }
+
+  function formatLastChecked(iso: string | null): string {
+    if (!iso) return ''
+    try {
+      return new Date(iso).toLocaleString()
+    } catch {
+      return ''
+    }
   }
 
   const themeDescription = $derived(() => {
@@ -37,6 +38,10 @@
     }
     return $theme === 'dark' ? $t('currentlyUsingDark') : $t('currentlyUsingLight')
   })
+
+  const versionLabel = $derived(
+    $updateStore.currentVersion ? `v${$updateStore.currentVersion}` : 'v—',
+  )
 </script>
 
 <div class="flex-1 p-8 max-w-4xl mx-auto w-full">
@@ -55,7 +60,6 @@
 
       <div class="bg-surface rounded-2xl border border-border p-5 shadow-sm space-y-6">
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3 items-start justify-items-center max-w-[600px] mx-auto">
-          <!-- Dark Preview -->
           <ThemePreviewButton
             value="dark"
             selectedValue={$theme}
@@ -67,7 +71,6 @@
             onClick={() => $theme = 'dark'}
           />
 
-          <!-- Light Preview -->
           <ThemePreviewButton
             value="light"
             selectedValue={$theme}
@@ -79,7 +82,6 @@
             onClick={() => $theme = 'light'}
           />
 
-          <!-- System Preview -->
           <ThemePreviewButton
             value="system"
             selectedValue={$theme}
@@ -92,7 +94,7 @@
             onClick={() => $theme = 'system'}
           />
         </div>
-        
+
         <p class="text-[10px] text-text-muted px-1 leading-relaxed">
           {themeDescription()}
         </p>
@@ -118,7 +120,7 @@
         </div>
 
         <div class="w-40">
-          <CustomSelect 
+          <CustomSelect
             options={languages}
             value={$locale}
             onSelect={(id) => setLocale(id as Locale)}
@@ -129,30 +131,65 @@
 
     <!-- About -->
     <section class="pt-8 border-t border-border/50">
-      <div class="bg-accent/5 border border-accent/20 rounded-2xl p-5 flex items-center justify-between group">
-        <div class="flex items-center gap-4">
-          <div class="w-10 h-10 bg-accent rounded-xl flex items-center justify-center shadow-lg shadow-accent/20 group-hover:scale-110 transition-transform">
-            <MusicNotesIcon size={20} weight="bold" class="text-background" />
+      <div
+        class="rounded-2xl p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border shadow-sm
+          {$updateStore.updateAvailable
+            ? 'bg-amber-500/5 border-amber-500/25'
+            : 'bg-accent/5 border-accent/20'}"
+      >
+        <div class="flex items-center gap-4 min-w-0">
+          <div class="w-10 h-10 text-accent shrink-0 flex items-center justify-center">
+            {@html logoRaw}
           </div>
-          <div>
-            <div class="font-bold text-accent italic tracking-tight font-display text-md">Harmonizr v0.1.0-alpha</div>
+          <div class="min-w-0">
+            <div class="font-bold text-accent tracking-tight font-display text-md truncate">
+              Harmoniz {versionLabel}
+            </div>
             <div class="text-[11px] text-text-secondary">{$t('aboutDescription')}</div>
+            {#if $updateStore.lastCheckedAt}
+              <div class="text-[10px] text-text-muted mt-1">
+                {$t('lastChecked')}: {formatLastChecked($updateStore.lastCheckedAt)}
+              </div>
+            {/if}
           </div>
         </div>
-        
-        <div class="flex flex-col items-end gap-1.5">
-          <button 
-            onclick={handleCheckUpdates}
-            disabled={isCheckingUpdates}
-            class="px-5 py-2 bg-accent text-background font-bold text-xs rounded-lg hover:bg-accent-hover transition-all active:scale-[0.98] shadow-lg shadow-accent/20 disabled:opacity-50 disabled:cursor-wait"
-          >
-            {isCheckingUpdates ? $t('checking') : $t('checkForUpdates')}
-          </button>
-          {#if updateStatusKey}
-            <span class="text-[9px] font-bold text-emerald-500 uppercase tracking-widest animate-pulse">
-              {$t(updateStatusKey)}
+
+        <div class="flex flex-col items-stretch sm:items-end gap-2 shrink-0">
+          {#if $updateStore.updateAvailable}
+            <p class="text-[11px] font-semibold text-amber-500/90 text-center sm:text-right">
+              {$t('updateAvailable').replace('{version}', $updateStore.latestVersion)}
+            </p>
+            <div class="flex flex-wrap gap-2 justify-end">
+              <button
+                onclick={() => updateStore.openDownload()}
+                class="px-5 py-2 bg-accent text-background font-bold text-xs rounded-lg hover:bg-accent-hover transition-all active:scale-[0.98] shadow-lg shadow-accent/20"
+              >
+                {$t('downloadUpdate')}
+              </button>
+              <button
+                onclick={() => updateStore.dismissUpdate()}
+                class="px-4 py-2 text-xs font-semibold text-text-secondary hover:text-text-primary rounded-lg hover:bg-white/5 transition-colors"
+              >
+                {$t('dismissUpdate')}
+              </button>
+            </div>
+          {:else if $updateStore.status === 'error'}
+            <span class="text-[10px] font-semibold text-red-400/90 uppercase tracking-wide text-center sm:text-right">
+              {$t('updateCheckFailed')}
+            </span>
+          {:else if $updateStore.status === 'ready'}
+            <span class="text-[10px] font-bold text-emerald-500 uppercase tracking-widest text-center sm:text-right">
+              {$t('latestVersion')}
             </span>
           {/if}
+
+          <button
+            onclick={handleCheckUpdates}
+            disabled={$updateStore.status === 'checking'}
+            class="px-5 py-2 bg-surface border border-border text-text-primary font-bold text-xs rounded-lg hover:bg-white/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait"
+          >
+            {$updateStore.status === 'checking' ? $t('checking') : $t('checkForUpdates')}
+          </button>
         </div>
       </div>
     </section>

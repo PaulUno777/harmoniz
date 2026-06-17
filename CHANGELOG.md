@@ -24,3 +24,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Production builds use Info-level logging and no DevTools inspector on startup
 
 [0.5.0]: https://github.com/PaulUno777/harmoniz/releases/tag/v0.5.0
+
+## [0.6.0] - 2026-06-17
+
+### Added
+- Update checking (GitHub Releases), sidebar version + Update pill
+- README screenshots
+- …your other features…
+
+### Changed
+- Rescan / duplicate detection improvements
+- …
+
+[0.6.0]: https://github.com/PaulUno777/harmoniz/releases/tag/v0.6.0

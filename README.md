@@ -27,7 +27,25 @@
 
 ## Screenshots
 
-> Add screenshots to [`docs/screenshots/`](docs/screenshots/) and embed them here before the first public release.
+<p align="center">
+  <img src="docs/screenshots/library.png" alt="Library view with search, track list, and floating player" width="800">
+  <br><em>Library — browse, search, and preview tracks</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/organizer.png" alt="Organizer view with metadata suggestions" width="800">
+  <br><em>Organizer — intelligent metadata suggestions and batch apply</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/cleaner.png" alt="Cleaner duplicate detection view" width="800">
+  <br><em>Cleaner — duplicate detection across your library</em>
+</p>
+
+<p align="center">
+  <img src="docs/screenshots/settings.png" alt="Settings with theme, language, and update check" width="800">
+  <br><em>Settings — themes, language, and update checking</em>
+</p>
 
 ## Download
 
