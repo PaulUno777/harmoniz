@@ -8,6 +8,7 @@
   import EmptyState from "./lib/components/layout/EmptyState.svelte";
   import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
   import FilterPanel, { type FilterState } from "./lib/components/layout/FilterPanel.svelte";
+  import AlgoConfigPanel from "./lib/components/layout/AlgoConfigPanel.svelte";
   import FloatingPlayer from "./lib/components/layout/FloatingPlayer.svelte";
   import Toast from "./lib/components/ui/Toast.svelte";
   import { theme } from "./lib/stores/theme";
@@ -44,6 +45,7 @@
   } from "./lib/stores/session";
 
   import { devMode } from "./lib/stores/devMode";
+  import { appConfig } from "./lib/stores/settings";
   // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
   const orgSelectedSuggestion = organizer.selectedSuggestion
   import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
@@ -70,6 +72,7 @@
     sizeMax: 0,
   });
   let isFilterPanelOpen = $state(false);
+  let isConfigPanelOpen = $state(false);
 
   // Pagination
   const PAGE_SIZE = 200;
@@ -209,6 +212,7 @@
 
   onMount(() => {
     theme.init();
+    void appConfig.load();
     void restoreSession().then(() => runStartupUpdateCheck());
 
     window.addEventListener("beforeunload", handleBeforeUnload);
@@ -496,12 +500,13 @@
     class="flex-1 flex flex-col min-w-0 min-h-0 bg-background relative overflow-hidden"
   >
     <main class="flex-1 flex flex-col min-w-0 min-h-0 overflow-hidden relative">
-      <TopBar 
-        {activeTab} 
-        onBrowse={handleBrowse} 
+      <TopBar
+        {activeTab}
+        onBrowse={handleBrowse}
         {searchQuery}
         onSearchChange={(query) => searchQuery = query}
         onFilterToggle={() => isFilterPanelOpen = !isFilterPanelOpen}
+        onConfigToggle={() => isConfigPanelOpen = !isConfigPanelOpen}
         {activeFilterCount}
         onRunAnalysis={handleRunAnalysis}
         analysisLoading={$analysisLoadingStore}
@@ -571,6 +576,12 @@
     onClose={() => isFilterPanelOpen = false}
     onApply={handleApplyFilters}
     initialFilters={filters}
+  />
+
+  <!-- Algorithm Config Panel -->
+  <AlgoConfigPanel
+    isOpen={isConfigPanelOpen}
+    onClose={() => isConfigPanelOpen = false}
   />
 </div>
 

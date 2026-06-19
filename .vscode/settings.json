@@ -2,15 +2,23 @@
   "cSpell.words": [
     "Annot",
     "assetserver",
+    "Colour",
     "Dedup",
+    "deduper",
     "hamonizer",
     "Harmoniz",
     "humanspeak",
+    "Jaro",
+    "osascript",
     "overscan",
+    "renamer",
+    "Rescan",
     "sugg",
     "suggs",
+    "tmpl",
     "unsub",
     "wailsapp",
-    "wailsjs"
+    "wailsjs",
+    "Winkler"
   ]
 }

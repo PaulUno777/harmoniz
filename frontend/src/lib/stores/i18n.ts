@@ -156,6 +156,21 @@ const translations = {
     empty: "(empty)",
     saveNChangesQuestion: "Save {n} change(s)?",
     applyThisField: "Apply this field",
+
+    // Algorithm Precision Panel
+    algorithmPrecision: "Algorithm Precision",
+    algorithmPrecisionDesc: "Tune how strictly the Cleaner and Organizer match tracks.",
+    cleanerPrecision: "Cleaner",
+    duplicateSimilarity: "Duplicate similarity",
+    duplicateSimilarityDesc: "Minimum title/filename similarity to flag as similar duplicates.",
+    artistGrouping: "Artist grouping",
+    artistGroupingDesc: "Minimum similarity for two artist names to be considered the same.",
+    organizerPrecision: "Organizer",
+    fieldConfidence: "Field confidence",
+    fieldConfidenceDesc: "Minimum per-field confidence to auto-apply a metadata suggestion.",
+    resetDefaults: "Reset to defaults",
+    loose: "Loose",
+    strict: "Strict",
   },
   fr: {
     library: "Bibliothèque",
@@ -300,6 +315,21 @@ const translations = {
     empty: "(vide)",
     saveNChangesQuestion: "Enregistrer {n} modification(s) ?",
     applyThisField: "Appliquer ce champ",
+
+    // Algorithm Precision Panel
+    algorithmPrecision: "Précision des algorithmes",
+    algorithmPrecisionDesc: "Ajustez la sensibilité du Nettoyeur et de l'Organiseur.",
+    cleanerPrecision: "Nettoyeur",
+    duplicateSimilarity: "Similarité des doublons",
+    duplicateSimilarityDesc: "Similarité minimale pour signaler des titres/fichiers comme similaires.",
+    artistGrouping: "Regroupement d'artistes",
+    artistGroupingDesc: "Similarité minimale pour considérer deux noms d'artiste identiques.",
+    organizerPrecision: "Organiseur",
+    fieldConfidence: "Confiance des champs",
+    fieldConfidenceDesc: "Confiance minimale par champ pour appliquer automatiquement une suggestion.",
+    resetDefaults: "Rétablir les valeurs par défaut",
+    loose: "Large",
+    strict: "Strict",
   },
 };
 
