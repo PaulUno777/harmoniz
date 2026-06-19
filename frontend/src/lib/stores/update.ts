@@ -1,11 +1,14 @@
 import { writable, derived, get } from "svelte/store";
 import { BrowserOpenURL } from "../../../wailsjs/runtime/runtime.js";
-import { CheckForUpdates, GetAppVersion } from "../../../wailsjs/go/main/App.js";
+import {
+  CheckForUpdates,
+  GetAppVersion,
+} from "../../../wailsjs/go/main/App.js";
 import { loadSession, saveSession } from "./session";
 
-export type UpdateStatus = "idle" | "checking" | "ready" | "error";
+type UpdateStatus = "idle" | "checking" | "ready" | "error";
 
-export interface UpdateState {
+interface UpdateState {
   currentVersion: string;
   latestVersion: string;
   updateAvailable: boolean;
@@ -44,6 +47,16 @@ function setState(partial: Partial<UpdateState>) {
   state.update((s) => ({ ...s, ...partial }));
 }
 
+function formatError(e: unknown): string {
+  if (e instanceof Error) return e.message;
+  if (typeof e === "string") return e;
+  try {
+    return JSON.stringify(e);
+  } catch {
+    return String(e);
+  }
+}
+
 async function init() {
   try {
     const version = await GetAppVersion();
@@ -53,10 +66,20 @@ async function init() {
   }
 }
 
-async function check(_silent = false) {
+async function check(silent = false) {
+  const current = get(state).currentVersion;
+  if (!silent) {
+    console.info("[update] checking for updates", { current });
+  }
   setState({ status: "checking", errorMessage: null });
   try {
     const result = await CheckForUpdates();
+    console.info("[update] check succeeded", {
+      current: result.currentVersion,
+      latest: result.latestVersion,
+      updateAvailable: result.updateAvailable,
+      downloadUrl: result.downloadUrl,
+    });
     setState({
       currentVersion: result.currentVersion ?? "",
       latestVersion: result.latestVersion ?? "",
@@ -68,7 +91,8 @@ async function check(_silent = false) {
       errorMessage: null,
     });
   } catch (e) {
-    const message = e instanceof Error ? e.message : String(e);
+    const message = formatError(e);
+    console.error("[update] check failed", { message, error: e });
     setState({
       status: "error",
       errorMessage: message,

@@ -1,7 +1,6 @@
 package update
 
 import (
-	"encoding/json"
 	"strings"
 	"testing"
 )
@@ -41,17 +40,40 @@ func TestIsNewer(t *testing.T) {
 	}
 }
 
-func TestParseGitHubRelease(t *testing.T) {
-	raw := `{"tag_name":"v0.5.0","html_url":"https://github.com/PaulUno777/harmoniz/releases/tag/v0.5.0"}`
-	var release githubRelease
-	if err := json.Unmarshal([]byte(raw), &release); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+func TestParseReleaseFromURL(t *testing.T) {
+	tests := []struct {
+		rawURL      string
+		wantVersion string
+		wantPage    string
+		wantErr     bool
+	}{
+		{
+			rawURL:      "https://github.com/PaulUno777/harmoniz/releases/tag/v0.7.0",
+			wantVersion: "0.7.0",
+			wantPage:    "https://github.com/PaulUno777/harmoniz/releases/tag/v0.7.0",
+		},
+		{
+			rawURL:  "https://github.com/PaulUno777/harmoniz/releases/latest",
+			wantErr: true,
+		},
 	}
-	if release.TagName != "v0.5.0" {
-		t.Fatalf("tag_name = %q", release.TagName)
-	}
-	if normalizeVersion(release.TagName) != "0.5.0" {
-		t.Fatalf("normalized = %q", normalizeVersion(release.TagName))
+	for _, tc := range tests {
+		gotVersion, gotPage, err := parseReleaseFromURL(tc.rawURL)
+		if tc.wantErr {
+			if err == nil {
+				t.Fatalf("parseReleaseFromURL(%q) expected error", tc.rawURL)
+			}
+			continue
+		}
+		if err != nil {
+			t.Fatalf("parseReleaseFromURL(%q): %v", tc.rawURL, err)
+		}
+		if gotVersion != tc.wantVersion {
+			t.Fatalf("version = %q, want %q", gotVersion, tc.wantVersion)
+		}
+		if gotPage != tc.wantPage {
+			t.Fatalf("page = %q, want %q", gotPage, tc.wantPage)
+		}
 	}
 }
 

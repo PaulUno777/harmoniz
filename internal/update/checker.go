@@ -1,23 +1,24 @@
 package update
 
 import (
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
+	"net/url"
 	"runtime"
 	"strings"
 	"time"
 
 	"golang.org/x/mod/semver"
 
+	"harmoniz/internal/logger"
 	"harmoniz/internal/version"
 )
 
 const (
-	githubOwner = "PaulUno777"
-	githubRepo  = "harmoniz"
-	latestAPI   = "https://api.github.com/repos/PaulUno777/harmoniz/releases/latest"
+	githubOwner     = "PaulUno777"
+	githubRepo      = "harmoniz"
+	latestRelease   = "https://github.com/PaulUno777/harmoniz/releases/latest"
+	releaseTagMarker = "/releases/tag/"
 )
 
 // Result describes the outcome of a release check.
@@ -29,54 +30,88 @@ type Result struct {
 	DownloadURL     string `json:"downloadUrl"`
 }
 
-type githubRelease struct {
-	TagName string `json:"tag_name"`
-	HTMLURL string `json:"html_url"`
-}
-
-// Check fetches the latest GitHub release and compares it to the running app version.
+// Check resolves the latest GitHub release via the /releases/latest redirect
+// (avoids REST API rate limits for unauthenticated clients).
 func Check() (Result, error) {
 	current := strings.TrimPrefix(strings.TrimSpace(version.Version), "v")
 	if current == "" {
-		return Result{}, fmt.Errorf("app version is not set")
-	}
-
-	client := &http.Client{Timeout: 10 * time.Second}
-	req, err := http.NewRequest(http.MethodGet, latestAPI, nil)
-	if err != nil {
+		err := fmt.Errorf("app version is not set")
+		logger.Log.Error("Update check failed", "error", err)
 		return Result{}, err
 	}
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", fmt.Sprintf("harmoniz/%s", current))
 
-	resp, err := client.Do(req)
+	logger.Log.Info("Checking for updates", "current", current, "platform", runtime.GOOS)
+
+	latest, releasePageURL, err := fetchLatestReleaseViaRedirect(current)
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to fetch latest release: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
-		return Result{}, fmt.Errorf("github API returned %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		logger.Log.Error("Update check failed", "stage", "redirect", "url", latestRelease, "error", err)
+		return Result{}, err
 	}
 
-	var release githubRelease
-	if err := json.NewDecoder(resp.Body).Decode(&release); err != nil {
-		return Result{}, fmt.Errorf("failed to parse release response: %w", err)
-	}
-
-	latest := normalizeVersion(release.TagName)
-	if latest == "" {
-		return Result{}, fmt.Errorf("release has no valid version tag")
-	}
-
-	return Result{
+	result := Result{
 		CurrentVersion:  current,
 		LatestVersion:   latest,
 		UpdateAvailable: isNewer(latest, current),
-		ReleasePageURL:  release.HTMLURL,
+		ReleasePageURL:  releasePageURL,
 		DownloadURL:     downloadURLForPlatform(runtime.GOOS),
-	}, nil
+	}
+	logger.Log.Info(
+		"Update check completed",
+		"current", result.CurrentVersion,
+		"latest", result.LatestVersion,
+		"update_available", result.UpdateAvailable,
+		"download_url", result.DownloadURL,
+	)
+	return result, nil
+}
+
+func fetchLatestReleaseViaRedirect(currentVersion string) (latestVersion, releasePageURL string, err error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			return http.ErrUseLastResponse
+		},
+	}
+
+	req, err := http.NewRequest(http.MethodHead, latestRelease, nil)
+	if err != nil {
+		return "", "", err
+	}
+	req.Header.Set("User-Agent", fmt.Sprintf("harmoniz/%s", currentVersion))
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to fetch latest release: %w", err)
+	}
+	defer resp.Body.Close()
+
+	location := resp.Header.Get("Location")
+	if location == "" {
+		return "", "", fmt.Errorf("github returned %d without a release redirect", resp.StatusCode)
+	}
+
+	return parseReleaseFromURL(location)
+}
+
+func parseReleaseFromURL(rawURL string) (latestVersion, releasePageURL string, err error) {
+	parsed, err := url.Parse(strings.TrimSpace(rawURL))
+	if err != nil {
+		return "", "", fmt.Errorf("invalid release redirect URL: %w", err)
+	}
+
+	idx := strings.LastIndex(parsed.Path, releaseTagMarker)
+	if idx == -1 {
+		return "", "", fmt.Errorf("release redirect URL has no tag: %s", rawURL)
+	}
+
+	tag := parsed.Path[idx+len(releaseTagMarker):]
+	latest := normalizeVersion(tag)
+	if latest == "" {
+		return "", "", fmt.Errorf("release redirect URL has no valid version tag: %s", rawURL)
+	}
+
+	pageURL := parsed.Scheme + "://" + parsed.Host + parsed.Path
+	return latest, pageURL, nil
 }
 
 func normalizeVersion(tag string) string {
