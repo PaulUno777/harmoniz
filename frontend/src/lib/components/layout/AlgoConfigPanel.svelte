@@ -2,7 +2,7 @@
   import { SlidersIcon, XIcon, SparkleIcon, BroomIcon, ArrowCounterClockwiseIcon } from 'phosphor-svelte'
   import { t } from '../../stores/i18n'
   import { appConfig } from '../../stores/settings'
-  import type { domain } from '../../../../wailsjs/go/models'
+  import { domain } from '../../../../wailsjs/go/models'
 
   interface Props {
     isOpen: boolean
@@ -10,8 +10,6 @@
   }
 
   let { isOpen, onClose }: Props = $props()
-
-  type AppConfig = domain.AppConfig
 
   // Local display state — updated instantly on oninput for smooth slider feedback.
   // Backend is only called on onchange (user releases the slider).
@@ -46,24 +44,24 @@
   // onchange handlers — save to backend when user releases the slider
   function saveSimilarity() {
     if (!$appConfig) return
-    void appConfig.save({
-      ...$appConfig,
-      cleaner: { ...$appConfig.cleaner, similarity_threshold: localSimilarity },
-    } as AppConfig)
+    void appConfig.save(domain.AppConfig.createFrom({
+      cleaner: { similarity_threshold: localSimilarity, artist_group_threshold: $appConfig.cleaner.artist_group_threshold },
+      organizer: { field_confidence_threshold: $appConfig.organizer.field_confidence_threshold },
+    }))
   }
   function saveArtist() {
     if (!$appConfig) return
-    void appConfig.save({
-      ...$appConfig,
-      cleaner: { ...$appConfig.cleaner, artist_group_threshold: localArtist },
-    } as AppConfig)
+    void appConfig.save(domain.AppConfig.createFrom({
+      cleaner: { similarity_threshold: $appConfig.cleaner.similarity_threshold, artist_group_threshold: localArtist },
+      organizer: { field_confidence_threshold: $appConfig.organizer.field_confidence_threshold },
+    }))
   }
   function saveField() {
     if (!$appConfig) return
-    void appConfig.save({
-      ...$appConfig,
+    void appConfig.save(domain.AppConfig.createFrom({
+      cleaner: { similarity_threshold: $appConfig.cleaner.similarity_threshold, artist_group_threshold: $appConfig.cleaner.artist_group_threshold },
       organizer: { field_confidence_threshold: localField },
-    } as AppConfig)
+    }))
   }
 </script>
 

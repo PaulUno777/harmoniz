@@ -1,15 +1,17 @@
 import { writable } from 'svelte/store'
-import type { domain } from '../../../wailsjs/go/models'
+import { domain } from '../../../wailsjs/go/models'
 
 // @ts-ignore — Wails bindings not available in browser dev mode
 import { GetConfig, UpdateConfig } from '../../../wailsjs/go/main/App'
 
 type AppConfig = domain.AppConfig
 
-const DEFAULT: AppConfig = {
-  cleaner: { similarity_threshold: 0.88, artist_group_threshold: 0.90 },
-  organizer: { field_confidence_threshold: 0.75 },
-} as AppConfig
+function defaultConfig(): AppConfig {
+  return domain.AppConfig.createFrom({
+    cleaner: { similarity_threshold: 0.88, artist_group_threshold: 0.90 },
+    organizer: { field_confidence_threshold: 0.75 },
+  })
+}
 
 const _cfg = writable<AppConfig | null>(null)
 
@@ -21,7 +23,7 @@ export const appConfig = {
       const cfg = await GetConfig()
       _cfg.set(cfg)
     } catch {
-      _cfg.set({ ...DEFAULT })
+      _cfg.set(defaultConfig())
     }
   },
 
@@ -41,6 +43,6 @@ export const appConfig = {
   },
 
   async resetDefaults(): Promise<void> {
-    await this.save({ ...DEFAULT })
+    await this.save(defaultConfig())
   },
 }
