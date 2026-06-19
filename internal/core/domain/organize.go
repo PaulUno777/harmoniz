@@ -35,8 +35,15 @@ type FilenamePreview struct {
 	After   string `json:"after"`
 }
 
-// DuplicateGroup holds a set of byte-identical tracks with a recommended track to keep.
+// DuplicateGroup holds a set of tracks that are identical or similar, with a recommended track to keep.
 type DuplicateGroup struct {
+	Kind              string  `json:"kind"`               // "exact", "similar_title", "similar_filename"
 	Tracks            []Track `json:"tracks"`
 	RecommendedKeepID uint64  `json:"recommended_keep_id"`
 }
+
+const (
+	DuplicateKindExact           = "exact"
+	DuplicateKindSimilarTitle    = "similar_title"
+	DuplicateKindSimilarFilename = "similar_filename"
+)

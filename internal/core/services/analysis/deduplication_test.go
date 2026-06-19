@@ -328,3 +328,256 @@ func TestDetectDuplicates_EmptyRepository(t *testing.T) {
 		t.Errorf("want 0 groups from empty repo, got %d", len(groups))
 	}
 }
+
+// ============================================================
+// ExactGroup kind tagging
+// ============================================================
+
+func TestDetectDuplicates_ExactGroupHasKind(t *testing.T) {
+	tracks := []domain.Track{
+		trkDup(1, "/lib/a.mp3"),
+		trkDup(2, "/lib/b.mp3"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(groups) != 1 {
+		t.Fatalf("want 1 group, got %d", len(groups))
+	}
+	if groups[0].Kind != domain.DuplicateKindExact {
+		t.Errorf("want kind %q, got %q", domain.DuplicateKindExact, groups[0].Kind)
+	}
+}
+
+// ============================================================
+// Similar title detection
+// ============================================================
+
+func trkTitle(id uint64, path, title string) domain.Track {
+	return testutil.NewTrack(id, path).WithTitle(title).Build()
+}
+
+func TestDetectDuplicates_SimilarTitleDetected(t *testing.T) {
+	tracks := []domain.Track{
+		trkTitle(1, "/lib/a.mp3", "Ave Maria"),
+		trkTitle(2, "/lib/b.mp3", "Ave Maria (Remastered)"),
+		trkTitle(3, "/lib/c.mp3", "Totally Different Song"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titleGroups []domain.DuplicateGroup
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarTitle {
+			titleGroups = append(titleGroups, g)
+		}
+	}
+	if len(titleGroups) != 1 {
+		t.Fatalf("want 1 similar_title group, got %d (all groups: %v)", len(titleGroups), groups)
+	}
+	if len(titleGroups[0].Tracks) != 2 {
+		t.Errorf("want 2 tracks in group, got %d", len(titleGroups[0].Tracks))
+	}
+}
+
+func TestDetectDuplicates_SimilarTitleLeadingTrackNum(t *testing.T) {
+	// "01 - Ave Maria" and "Ave Maria" should be grouped.
+	tracks := []domain.Track{
+		trkTitle(1, "/lib/a.mp3", "01 - Ave Maria"),
+		trkTitle(2, "/lib/b.mp3", "Ave Maria"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var titleGroups []domain.DuplicateGroup
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarTitle {
+			titleGroups = append(titleGroups, g)
+		}
+	}
+	if len(titleGroups) != 1 {
+		t.Fatalf("want 1 similar_title group, got %d", len(titleGroups))
+	}
+}
+
+func TestDetectDuplicates_DissimilarTitlesNotGrouped(t *testing.T) {
+	tracks := []domain.Track{
+		trkTitle(1, "/lib/a.mp3", "Ave Maria"),
+		trkTitle(2, "/lib/b.mp3", "Stairway to Heaven"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarTitle {
+			t.Errorf("dissimilar titles must not form a group: %v", g)
+		}
+	}
+}
+
+func TestDetectDuplicates_SimilarTitleShortSkipped(t *testing.T) {
+	// Titles shorter than MinSimilarKeyLen after normalization must be skipped.
+	tracks := []domain.Track{
+		trkTitle(1, "/lib/a.mp3", "Hi"),
+		trkTitle(2, "/lib/b.mp3", "Hi"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarTitle {
+			t.Errorf("short titles must be skipped, got group: %v", g)
+		}
+	}
+}
+
+func TestDetectDuplicates_ExactAlreadyInGroupNotRepeatedAsSimilar(t *testing.T) {
+	// Byte-identical tracks must not also appear in a similar_title group.
+	a := testutil.NewTrack(1, "/lib/a.mp3").
+		WithSize(fileSize).WithHashes(hashPartial, hashFull).WithTitle("Ave Maria").Build()
+	b := testutil.NewTrack(2, "/lib/b.mp3").
+		WithSize(fileSize).WithHashes(hashPartial, hashFull).WithTitle("Ave Maria").Build()
+
+	svc := NewDeduplicationService(testutil.NewFakeRepo(a, b))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.Kind != domain.DuplicateKindExact {
+			t.Errorf("exact duplicates must not appear in %q group: %v", g.Kind, g)
+		}
+	}
+}
+
+// ============================================================
+// Similar filename detection
+// ============================================================
+
+func trkFilename(id uint64, path string) domain.Track {
+	// No title tag — only filename similarity applies.
+	return testutil.NewTrack(id, path).Build()
+}
+
+func TestDetectDuplicates_SimilarFilenameDetected(t *testing.T) {
+	tracks := []domain.Track{
+		trkFilename(1, "/lib/Ave Maria.mp3"),
+		trkFilename(2, "/lib/Ave Maria (Live).mp3"),
+		trkFilename(3, "/lib/Stairway to Heaven.mp3"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fnGroups []domain.DuplicateGroup
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarFilename {
+			fnGroups = append(fnGroups, g)
+		}
+	}
+	if len(fnGroups) != 1 {
+		t.Fatalf("want 1 similar_filename group, got %d (all groups: %v)", len(fnGroups), groups)
+	}
+	if len(fnGroups[0].Tracks) != 2 {
+		t.Errorf("want 2 tracks in filename group, got %d", len(fnGroups[0].Tracks))
+	}
+}
+
+func TestDetectDuplicates_FilenameLeadingTrackNumStripped(t *testing.T) {
+	// "01 - Ave Maria.mp3" and "Ave Maria.mp3" should group as similar filenames.
+	tracks := []domain.Track{
+		trkFilename(1, "/lib/01 - Ave Maria.mp3"),
+		trkFilename(2, "/lib/Ave Maria.mp3"),
+	}
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tracks...))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fnGroups []domain.DuplicateGroup
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarFilename {
+			fnGroups = append(fnGroups, g)
+		}
+	}
+	if len(fnGroups) != 1 {
+		t.Fatalf("want 1 similar_filename group, got %d", len(fnGroups))
+	}
+}
+
+func TestDetectDuplicates_TaggedAndUntaggedGroupedByFilename(t *testing.T) {
+	// A tagged track with no title-match partner still participates in filename grouping.
+	tagged := testutil.NewTrack(1, "/lib/Ave Maria.mp3").WithTitle("Ave Maria").Build()
+	untagged := trkFilename(2, "/lib/Ave Maria (Live).mp3")
+
+	svc := NewDeduplicationService(testutil.NewFakeRepo(tagged, untagged))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fnGroups []domain.DuplicateGroup
+	for _, g := range groups {
+		if g.Kind == domain.DuplicateKindSimilarFilename {
+			fnGroups = append(fnGroups, g)
+		}
+	}
+	if len(fnGroups) != 1 {
+		t.Fatalf("want 1 similar_filename group for tagged+untagged pair, got %d", len(fnGroups))
+	}
+}
+
+func TestDetectDuplicates_TitleGroupMembersExcludedFromFilenameGroups(t *testing.T) {
+	// Tracks that already form a title group must not also appear in filename groups.
+	t1 := testutil.NewTrack(1, "/lib/Ave Maria.mp3").WithTitle("Ave Maria").Build()
+	t2 := testutil.NewTrack(2, "/lib/Ave Maria Live.mp3").WithTitle("Ave Maria Live").Build()
+	t3 := trkFilename(3, "/lib/Ave Maria backup.mp3") // untagged, similar filename
+
+	svc := NewDeduplicationService(testutil.NewFakeRepo(t1, t2, t3))
+	groups, err := svc.DetectDuplicates(context.Background(), "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, g := range groups {
+		if g.Kind != domain.DuplicateKindSimilarFilename {
+			continue
+		}
+		for _, tr := range g.Tracks {
+			if tr.ID == 1 || tr.ID == 2 {
+				t.Errorf("title group member (id=%d) must not appear in similar_filename group", tr.ID)
+			}
+		}
+	}
+}
+
+// ============================================================
+// normSimilar helper — unit tests
+// ============================================================
+
+func TestNormSimilar_TrackNumberStripped(t *testing.T) {
+	cases := []struct{ in, want string }{
+		{"01 - Ave Maria", "ave maria"},
+		{"1. Hello World", "hello world"},
+		{"Ave Maria", "ave maria"},
+		{"Ave Maria (Remastered)", "ave maria"},
+		{"The Lion King", "lion king"},
+		{"An Unexpected Journey", "unexpected journey"},
+	}
+	for _, c := range cases {
+		got := normSimilar(c.in)
+		if got != c.want {
+			t.Errorf("normSimilar(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+

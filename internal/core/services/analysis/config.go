@@ -29,9 +29,27 @@ func DefaultClusteringConfig() ClusteringConfig {
 type DedupConfig struct {
 	// MaxSizeGroupLog: log warning when a size-group exceeds this (default 500).
 	MaxSizeGroupLog int
+
+	// SimilarityThreshold: minimum Jaro-Winkler score to consider two titles/filenames similar (default 0.88).
+	SimilarityThreshold float64
+	// JaroWinklerP: prefix scaling factor for similarity detection (default 0.7).
+	JaroWinklerP float64
+	// JaroWinklerMaxPrefix: max prefix length for JW bonus in similarity detection (default 4).
+	JaroWinklerMaxPrefix int
+	// MaxSimilarBucketSize: skip buckets with more tracks than this to avoid O(N²) blow-up (default 500).
+	MaxSimilarBucketSize int
+	// MinSimilarKeyLen: skip keys shorter than this to avoid false positives (default 3).
+	MinSimilarKeyLen int
 }
 
 // DefaultDedupConfig returns production defaults.
 func DefaultDedupConfig() DedupConfig {
-	return DedupConfig{MaxSizeGroupLog: 500}
+	return DedupConfig{
+		MaxSizeGroupLog:      500,
+		SimilarityThreshold:  0.88,
+		JaroWinklerP:         0.7,
+		JaroWinklerMaxPrefix: 4,
+		MaxSimilarBucketSize: 500,
+		MinSimilarKeyLen:     3,
+	}
 }

@@ -73,6 +73,7 @@ export namespace domain {
 	    }
 	}
 	export class DuplicateGroup {
+	    kind: string;
 	    tracks: Track[];
 	    recommended_keep_id: number;
 	
@@ -82,6 +83,7 @@ export namespace domain {
 	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.kind = source["kind"];
 	        this.tracks = this.convertValues(source["tracks"], Track);
 	        this.recommended_keep_id = source["recommended_keep_id"];
 	    }
