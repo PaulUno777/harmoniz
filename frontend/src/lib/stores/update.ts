@@ -4,7 +4,11 @@ import {
   CheckForUpdates,
   GetAppVersion,
 } from "../../../wailsjs/go/main/App.js";
-import { loadSession, saveSession } from "./session";
+import {
+  loadSession,
+  saveSession,
+  type PersistedUpdateCheck,
+} from "./session";
 
 type UpdateStatus = "idle" | "checking" | "ready" | "error";
 
@@ -18,6 +22,11 @@ interface UpdateState {
   lastCheckedAt: string | null;
   errorMessage: string | null;
 }
+
+/** Minimum interval between successful GitHub release checks. */
+export const CHECK_TTL_MS = 60 * 60 * 1000;
+/** Shorter retry window after a failed check (network/GitHub errors). */
+export const CHECK_ERROR_TTL_MS = 15 * 60 * 1000;
 
 const initialState: UpdateState = {
   currentVersion: "",
@@ -34,6 +43,8 @@ const state = writable<UpdateState>({ ...initialState });
 const dismissedVersion = writable<string | undefined>(
   loadSession().dismissedUpdateVersion,
 );
+
+let checkInFlight: Promise<void> | null = null;
 
 export const showUpdatePrompt = derived(
   [state, dismissedVersion],
@@ -57,6 +68,41 @@ function formatError(e: unknown): string {
   }
 }
 
+export function isCheckCacheFresh(lastCheckedAt: string | null, status?: UpdateStatus): boolean {
+  if (!lastCheckedAt) return false;
+  const age = Date.now() - new Date(lastCheckedAt).getTime();
+  if (age < 0) return false;
+  const ttl = status === "error" ? CHECK_ERROR_TTL_MS : CHECK_TTL_MS;
+  return age < ttl;
+}
+
+function loadCachedCheck(): PersistedUpdateCheck | undefined {
+  return loadSession().updateCheckCache;
+}
+
+function applyCachedCheck(cached: PersistedUpdateCheck) {
+  setState({
+    latestVersion: cached.latestVersion,
+    updateAvailable: cached.updateAvailable,
+    downloadUrl: cached.downloadUrl,
+    releasePageUrl: cached.releasePageUrl,
+    status: cached.status,
+    lastCheckedAt: cached.checkedAt,
+    errorMessage: cached.errorMessage ?? null,
+  });
+}
+
+function persistCheck(partial: Omit<PersistedUpdateCheck, "checkedAt">) {
+  const checkedAt = new Date().toISOString();
+  saveSession({
+    updateCheckCache: {
+      checkedAt,
+      ...partial,
+    },
+  });
+  return checkedAt;
+}
+
 async function init() {
   try {
     const version = await GetAppVersion();
@@ -64,9 +110,36 @@ async function init() {
   } catch (e) {
     console.warn("[update] failed to load app version:", e);
   }
+
+  const cached = loadCachedCheck();
+  if (cached) {
+    applyCachedCheck(cached);
+  }
 }
 
-async function check(silent = false) {
+async function check(options: { silent?: boolean; force?: boolean } = {}) {
+  const { silent = false, force = false } = options;
+
+  const cached = loadCachedCheck();
+  if (!force && cached && isCheckCacheFresh(cached.checkedAt, cached.status)) {
+    if (!silent) {
+      console.info("[update] using cached check", { checkedAt: cached.checkedAt });
+    }
+    applyCachedCheck(cached);
+    return;
+  }
+
+  if (checkInFlight) {
+    return checkInFlight;
+  }
+
+  checkInFlight = runCheck(silent).finally(() => {
+    checkInFlight = null;
+  });
+  return checkInFlight;
+}
+
+async function runCheck(silent: boolean) {
   const current = get(state).currentVersion;
   if (!silent) {
     console.info("[update] checking for updates", { current });
@@ -74,6 +147,14 @@ async function check(silent = false) {
   setState({ status: "checking", errorMessage: null });
   try {
     const result = await CheckForUpdates();
+    const checkedAt = persistCheck({
+      latestVersion: result.latestVersion ?? "",
+      updateAvailable: !!result.updateAvailable,
+      downloadUrl: result.downloadUrl ?? "",
+      releasePageUrl: result.releasePageUrl ?? "",
+      status: "ready",
+      errorMessage: null,
+    });
     console.info("[update] check succeeded", {
       current: result.currentVersion,
       latest: result.latestVersion,
@@ -87,16 +168,24 @@ async function check(silent = false) {
       downloadUrl: result.downloadUrl ?? "",
       releasePageUrl: result.releasePageUrl ?? "",
       status: "ready",
-      lastCheckedAt: new Date().toISOString(),
+      lastCheckedAt: checkedAt,
       errorMessage: null,
     });
   } catch (e) {
     const message = formatError(e);
+    const checkedAt = persistCheck({
+      latestVersion: "",
+      updateAvailable: false,
+      downloadUrl: "",
+      releasePageUrl: "",
+      status: "error",
+      errorMessage: message,
+    });
     console.error("[update] check failed", { message, error: e });
     setState({
       status: "error",
       errorMessage: message,
-      lastCheckedAt: new Date().toISOString(),
+      lastCheckedAt: checkedAt,
     });
   }
 }
@@ -127,4 +216,5 @@ export const updateStore = {
   openDownload,
   dismissUpdate,
   isDismissed,
+  isCheckCacheFresh,
 };

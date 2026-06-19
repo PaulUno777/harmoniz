@@ -9,7 +9,7 @@
   import { t } from "../../stores/i18n";
   import { locale, setLocale, type Locale } from "../../stores/i18n";
   import { theme } from "../../stores/theme";
-  import { updateStore } from "../../stores/update";
+  import { updateStore, isCheckCacheFresh } from "../../stores/update";
   import CustomSelect from "../ui/CustomSelect.svelte";
   import ThemePreviewButton from "../ui/ThemePreviewButton.svelte";
   import logoRaw from "../../../assets/images/hamonizer_logo.svg?raw";
@@ -43,6 +43,10 @@
 
   const versionLabel = $derived(
     $updateStore.currentVersion ? `v${$updateStore.currentVersion}` : "v—",
+  );
+
+  const checkRecentlyCached = $derived(
+    isCheckCacheFresh($updateStore.lastCheckedAt, $updateStore.status),
   );
 </script>
 
@@ -215,8 +219,9 @@
 
             <button
               onclick={handleCheckUpdates}
-              disabled={$updateStore.status === "checking"}
-              class="px-5 py-2 bg-surface border border-border text-text-primary font-bold text-xs rounded-lg hover:bg-white/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-wait"
+              disabled={$updateStore.status === "checking" || checkRecentlyCached}
+              title={checkRecentlyCached ? $t("updateCheckCached") : undefined}
+              class="px-5 py-2 bg-surface border border-border text-text-primary font-bold text-xs rounded-lg hover:bg-white/5 transition-all active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {$updateStore.status === "checking"
                 ? $t("checking")

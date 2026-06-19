@@ -14,6 +14,16 @@ export interface PersistedPlayback {
   shuffleMode: boolean;
 }
 
+export interface PersistedUpdateCheck {
+  checkedAt: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  downloadUrl: string;
+  releasePageUrl: string;
+  status: "ready" | "error";
+  errorMessage?: string | null;
+}
+
 export interface PersistedSession {
   locale: Locale;
   libraryPath: string;
@@ -24,6 +34,7 @@ export interface PersistedSession {
   selectedTrackPath: string | null;
   playback: PersistedPlayback | null;
   dismissedUpdateVersion?: string;
+  updateCheckCache?: PersistedUpdateCheck;
 }
 
 const STORAGE_KEY = "harmoniz.session";
@@ -108,6 +119,22 @@ function parseSession(raw: unknown): PersistedSession | null {
       typeof raw.dismissedUpdateVersion === "string"
         ? raw.dismissedUpdateVersion
         : undefined,
+    updateCheckCache: parseUpdateCheckCache(raw.updateCheckCache),
+  };
+}
+
+function parseUpdateCheckCache(raw: unknown): PersistedUpdateCheck | undefined {
+  if (!isRecord(raw) || typeof raw.checkedAt !== "string") return undefined;
+  const status = raw.status;
+  if (status !== "ready" && status !== "error") return undefined;
+  return {
+    checkedAt: raw.checkedAt,
+    latestVersion: typeof raw.latestVersion === "string" ? raw.latestVersion : "",
+    updateAvailable: raw.updateAvailable === true,
+    downloadUrl: typeof raw.downloadUrl === "string" ? raw.downloadUrl : "",
+    releasePageUrl: typeof raw.releasePageUrl === "string" ? raw.releasePageUrl : "",
+    status,
+    errorMessage: typeof raw.errorMessage === "string" ? raw.errorMessage : null,
   };
 }
 
