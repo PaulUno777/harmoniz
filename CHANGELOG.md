@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.7.0] - 2026-06-17
+
+### Added
+
+- **Algorithm configuration panel** — adjust Cleaner and Organizer precision from the UI (similarity thresholds, artist grouping, field confidence)
+- **Persistent app config** — algorithm settings saved to disk via `GetConfig` / `UpdateConfig`; services reload when values change
+- **Fuzzy duplicate detection** — groups similar titles and filenames (Jaro–Winkler), with `kind` labels: `exact`, `similar_title`, `similar_filename`
+- **Duplicate quality scoring** — prefers tracks with richer metadata and penalizes obvious copy filenames (e.g. `song (1).mp3`)
+- **Status bar file context** — shows the selected track filename in the footer
+- Unit tests for deduplication, clustering config, and settings persistence
+
+### Changed
+
+- Organizer suggestions use the configurable field-confidence threshold instead of a hard-coded value
+- Sidebar and status bar layout refinements; update prompt accessible from the footer
+- Updated application icon
+
+## [0.6.0] - 2026-06-17
+
+### Added
+
+- In-app update checking against GitHub Releases (`GetAppVersion`, `CheckForUpdates`)
+- Sidebar version label and Update pill; settings page update UI with download and dismiss
+- README screenshots for Library, Organizer, Cleaner, and Settings
+
+### Changed
+
+- Library rescan workflow and duplicate detection pipeline improvements
+- Cleaner and Organizer refinements
+
 ## [0.5.0] - 2026-06-17
 
 ### Added
@@ -23,17 +53,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Production builds use Info-level logging and no DevTools inspector on startup
 
-[0.5.0]: https://github.com/PaulUno777/harmoniz/releases/tag/v0.5.0
-
-## [0.6.0] - 2026-06-17
-
-### Added
-- Update checking (GitHub Releases), sidebar version + Update pill
-- README screenshots
-- Refine the organizer and the cleaner 
-
-### Changed
-- Rescan / duplicate detection improvements
-- …
-
+[0.7.0]: https://github.com/PaulUno777/harmoniz/releases/tag/v0.7.0
 [0.6.0]: https://github.com/PaulUno777/harmoniz/releases/tag/v0.6.0
+[0.5.0]: https://github.com/PaulUno777/harmoniz/releases/tag/v0.5.0

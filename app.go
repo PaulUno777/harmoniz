@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"harmoniz/internal/adapters/settings"
 	"harmoniz/internal/core/domain"
 	"harmoniz/internal/core/ports"
 	"harmoniz/internal/core/services/analysis"
@@ -31,6 +32,8 @@ type App struct {
 	renamer    *organize.RenameService
 	suggester  *organize.SuggestionService
 	metaWriter ports.MetadataWriter
+	cfg        domain.AppConfig
+	cfgStore   *settings.Store
 }
 
 // NewApp creates a new App application struct
@@ -39,16 +42,59 @@ func NewApp(
 	repo ports.TrackRepository,
 	fsPort ports.FilesystemPort,
 	metaWriter ports.MetadataWriter,
+	cfgStore *settings.Store,
 ) *App {
-	return &App{
+	cfg, err := cfgStore.Load()
+	if err != nil {
+		logger.Log.Warn("Failed to load config, using defaults", "error", err)
+		cfg = domain.DefaultAppConfig()
+	}
+	a := &App{
 		repo:       repo,
 		scanner:    scannerService,
-		clustering: analysis.NewClusteringService(repo),
-		deduper:    analysis.NewDeduplicationService(repo),
 		renamer:    organize.NewRenameService(fsPort, repo),
 		suggester:  organize.NewSuggestionService(repo),
 		metaWriter: metaWriter,
+		cfg:        cfg,
+		cfgStore:   cfgStore,
 	}
+	a.rebuildServices()
+	return a
+}
+
+// rebuildServices recreates algorithm services with the current config.
+func (a *App) rebuildServices() {
+	a.clustering = analysis.NewClusteringServiceWithConfig(a.repo, clusteringCfgFrom(a.cfg))
+	a.deduper = analysis.NewDeduplicationServiceWithConfig(a.repo, dedupCfgFrom(a.cfg))
+}
+
+// clusteringCfgFrom maps AppConfig → ClusteringConfig, keeping JW internals at defaults.
+func clusteringCfgFrom(cfg domain.AppConfig) analysis.ClusteringConfig {
+	d := analysis.DefaultClusteringConfig()
+	d.JaroWinklerThreshold = cfg.Cleaner.ArtistGroupThreshold
+	return d
+}
+
+// dedupCfgFrom maps AppConfig → DedupConfig, keeping JW internals at defaults.
+func dedupCfgFrom(cfg domain.AppConfig) analysis.DedupConfig {
+	d := analysis.DefaultDedupConfig()
+	d.SimilarityThreshold = cfg.Cleaner.SimilarityThreshold
+	return d
+}
+
+// GetConfig returns the current algorithm configuration.
+func (a *App) GetConfig() domain.AppConfig {
+	return a.cfg
+}
+
+// UpdateConfig saves new algorithm configuration and rebuilds the affected services.
+func (a *App) UpdateConfig(cfg domain.AppConfig) error {
+	if err := a.cfgStore.Save(cfg); err != nil {
+		return fmt.Errorf("save config: %w", err)
+	}
+	a.cfg = cfg
+	a.rebuildServices()
+	return nil
 }
 
 // startup is called when the app starts. The context is saved
@@ -304,7 +350,7 @@ func (a *App) AnalyzeForOrganize(root string) ([]domain.OrganizerSuggestion, err
 // ApplyOrganizerSuggestion applies selected metadata fields to a track (non-destructive).
 // Empty string values for string fields mean "keep existing"; 0 for int fields means "keep existing".
 // filenameTemplate: if non-empty, renames/moves the file using this template after updating tags.
-//   - Template may include '/' to organize into subfolders (e.g. "{artist}/{artist} - {title}.{ext}").
+//   - Template may include '/' to organize into sub-folders (e.g. "{artist}/{artist} - {title}.{ext}").
 //   - libraryRoot: required when the template contains '/' so the subfolder is created inside the root.
 //
 // Returns the new absolute file path (unchanged if no rename was performed).
@@ -387,11 +433,12 @@ func (a *App) ApplyAllHighConfidence(root string, minConfidence float64, filenam
 		if s.Score < minConfidence || len(s.Fields) == 0 {
 			continue
 		}
-		artist := highConfStr(s.Fields, "artist", 0.75)
-		title := highConfStr(s.Fields, "title", 0.75)
-		album := highConfStr(s.Fields, "album", 0.75)
-		year := highConfInt(s.Fields, "year", 0.75)
-		trackNum := highConfInt(s.Fields, "track_num", 0.75)
+		fieldThreshold := a.cfg.Organizer.FieldConfidenceThreshold
+		artist := highConfStr(s.Fields, "artist", fieldThreshold)
+		title := highConfStr(s.Fields, "title", fieldThreshold)
+		album := highConfStr(s.Fields, "album", fieldThreshold)
+		year := highConfInt(s.Fields, "year", fieldThreshold)
+		trackNum := highConfInt(s.Fields, "track_num", fieldThreshold)
 
 		if artist == "" && title == "" && album == "" && year == 0 && trackNum == 0 {
 			continue

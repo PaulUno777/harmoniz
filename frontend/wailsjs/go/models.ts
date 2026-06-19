@@ -1,5 +1,63 @@
 export namespace domain {
 	
+	export class OrganizerAlgoConfig {
+	    field_confidence_threshold: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new OrganizerAlgoConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.field_confidence_threshold = source["field_confidence_threshold"];
+	    }
+	}
+	export class CleanerAlgoConfig {
+	    similarity_threshold: number;
+	    artist_group_threshold: number;
+	
+	    static createFrom(source: any = {}) {
+	        return new CleanerAlgoConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.similarity_threshold = source["similarity_threshold"];
+	        this.artist_group_threshold = source["artist_group_threshold"];
+	    }
+	}
+	export class AppConfig {
+	    cleaner: CleanerAlgoConfig;
+	    organizer: OrganizerAlgoConfig;
+	
+	    static createFrom(source: any = {}) {
+	        return new AppConfig(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.cleaner = this.convertValues(source["cleaner"], CleanerAlgoConfig);
+	        this.organizer = this.convertValues(source["organizer"], OrganizerAlgoConfig);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class ArtistSuggestion {
 	    original: string;
 	    suggested: string;
@@ -20,6 +78,7 @@ export namespace domain {
 	        this.confidence_level = source["confidence_level"];
 	    }
 	}
+	
 	export class Track {
 	    id: number;
 	    path: string;
@@ -212,6 +271,7 @@ export namespace domain {
 		    return a;
 		}
 	}
+	
 	export class OrganizerSuggestion {
 	    track_id: number;
 	    track: Track;

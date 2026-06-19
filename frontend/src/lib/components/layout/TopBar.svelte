@@ -15,6 +15,7 @@
     onSearchChange: (query: string) => void;
     onFilterToggle: () => void;
     activeFilterCount: number;
+    onConfigToggle: () => void;
     onRunAnalysis?: () => void;
     analysisLoading?: boolean;
     hasLibrary?: boolean;
@@ -27,6 +28,7 @@
     onSearchChange,
     onFilterToggle,
     activeFilterCount,
+    onConfigToggle,
   }: Props = $props();
 </script>
 
@@ -80,8 +82,9 @@
       {/if}
     </button>
     <button
+      onclick={onConfigToggle}
       class="p-2 hover:bg-white/5 rounded-lg text-text-secondary transition-colors"
-      title={$t("viewOptions")}
+      title={$t("algorithmPrecision")}
     >
       <ListIcon size={20} />
     </button>

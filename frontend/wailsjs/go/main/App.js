@@ -34,6 +34,10 @@ export function GetAppVersion() {
   return window['go']['main']['App']['GetAppVersion']();
 }
 
+export function GetConfig() {
+  return window['go']['main']['App']['GetConfig']();
+}
+
 export function GetLastDebugReport() {
   return window['go']['main']['App']['GetLastDebugReport']();
 }
@@ -64,6 +68,10 @@ export function RescanLibrary(arg1) {
 
 export function ScanLibrary(arg1) {
   return window['go']['main']['App']['ScanLibrary'](arg1);
+}
+
+export function UpdateConfig(arg1) {
+  return window['go']['main']['App']['UpdateConfig'](arg1);
 }
 
 export function UpdateTrackTags(arg1, arg2, arg3, arg4, arg5, arg6) {

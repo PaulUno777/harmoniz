@@ -19,6 +19,8 @@ export function DetectDuplicates(arg1:string):Promise<Array<domain.DuplicateGrou
 
 export function GetAppVersion():Promise<string>;
 
+export function GetConfig():Promise<domain.AppConfig>;
+
 export function GetLastDebugReport():Promise<string>;
 
 export function ListTracks(arg1:string,arg2:string,arg3:number,arg4:number,arg5:number,arg6:number,arg7:number,arg8:number):Promise<domain.ListTracksResult>;
@@ -34,5 +36,7 @@ export function RenameTrack(arg1:number,arg2:string):Promise<string>;
 export function RescanLibrary(arg1:string):Promise<void>;
 
 export function ScanLibrary(arg1:string):Promise<void>;
+
+export function UpdateConfig(arg1:domain.AppConfig):Promise<void>;
 
 export function UpdateTrackTags(arg1:number,arg2:string,arg3:string,arg4:string,arg5:number,arg6:number):Promise<void>;
