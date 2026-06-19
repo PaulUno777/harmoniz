@@ -83,6 +83,17 @@
   let previousTab = $state<TabId>("library");
   let initialScrollIndex = $state<number | null>(null);
 
+  const statusSelectedFileName = $derived.by(() => {
+    if (activeTab === "organizer") {
+      const s = get(orgSelectedSuggestion);
+      return s?.track.filename ?? s?.track.path.split(/[/\\]/).pop() ?? null;
+    }
+    if (activeTab === "library" && selectedTrack) {
+      return selectedTrack.filename ?? selectedTrack.path.split(/[/\\]/).pop() ?? null;
+    }
+    return null;
+  });
+
   function collectSessionSnapshot(): Partial<PersistedSession> {
     return {
       libraryPath: currentLibraryPath,
@@ -552,8 +563,9 @@
     <footer class="shrink-0">
       <StatusBar
         tracked={totalTrackCount}
-        cleaned={0}
         hasLibrary={!!currentLibraryPath}
+        selectedFileName={statusSelectedFileName}
+        onOpenSettings={() => (activeTab = "settings")}
       />
     </footer>
   </div>
