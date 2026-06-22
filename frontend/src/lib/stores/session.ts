@@ -14,6 +14,16 @@ export interface PersistedPlayback {
   shuffleMode: boolean;
 }
 
+export interface PersistedUpdateCheck {
+  checkedAt: string;
+  latestVersion: string;
+  updateAvailable: boolean;
+  downloadUrl: string;
+  releasePageUrl: string;
+  status: "ready" | "error";
+  errorMessage?: string | null;
+}
+
 export interface PersistedSession {
   locale: Locale;
   libraryPath: string;
@@ -24,6 +34,7 @@ export interface PersistedSession {
   selectedTrackPath: string | null;
   playback: PersistedPlayback | null;
   dismissedUpdateVersion?: string;
+  updateCheckCache?: PersistedUpdateCheck;
 }
 
 const STORAGE_KEY = "harmoniz.session";
@@ -35,7 +46,7 @@ const DEFAULT_FILTERS: FilterState = {
   sizeMax: 0,
 };
 
-export const defaultSession: PersistedSession = {
+const defaultSession: PersistedSession = {
   locale: "en",
   libraryPath: "",
   activeTab: "library",
@@ -75,7 +86,8 @@ function parsePlayback(raw: unknown): PersistedPlayback | null {
     volume: typeof raw.volume === "number" ? raw.volume : 0.8,
     isMuted: raw.isMuted === true,
     loopMode:
-      typeof loopMode === "string" && VALID_LOOP_MODES.includes(loopMode as LoopMode)
+      typeof loopMode === "string" &&
+      VALID_LOOP_MODES.includes(loopMode as LoopMode)
         ? (loopMode as LoopMode)
         : "none",
     shuffleMode: raw.shuffleMode === true,
@@ -100,7 +112,8 @@ function parseSession(raw: unknown): PersistedSession | null {
         : "library",
     searchQuery: typeof raw.searchQuery === "string" ? raw.searchQuery : "",
     filters: parseFilters(raw.filters),
-    listOffset: typeof raw.listOffset === "number" ? Math.max(0, raw.listOffset) : 0,
+    listOffset:
+      typeof raw.listOffset === "number" ? Math.max(0, raw.listOffset) : 0,
     selectedTrackPath:
       typeof raw.selectedTrackPath === "string" ? raw.selectedTrackPath : null,
     playback: parsePlayback(raw.playback),
@@ -108,6 +121,25 @@ function parseSession(raw: unknown): PersistedSession | null {
       typeof raw.dismissedUpdateVersion === "string"
         ? raw.dismissedUpdateVersion
         : undefined,
+    updateCheckCache: parseUpdateCheckCache(raw.updateCheckCache),
+  };
+}
+
+function parseUpdateCheckCache(raw: unknown): PersistedUpdateCheck | undefined {
+  if (!isRecord(raw) || typeof raw.checkedAt !== "string") return undefined;
+  const status = raw.status;
+  if (status !== "ready" && status !== "error") return undefined;
+  return {
+    checkedAt: raw.checkedAt,
+    latestVersion:
+      typeof raw.latestVersion === "string" ? raw.latestVersion : "",
+    updateAvailable: raw.updateAvailable === true,
+    downloadUrl: typeof raw.downloadUrl === "string" ? raw.downloadUrl : "",
+    releasePageUrl:
+      typeof raw.releasePageUrl === "string" ? raw.releasePageUrl : "",
+    status,
+    errorMessage:
+      typeof raw.errorMessage === "string" ? raw.errorMessage : null,
   };
 }
 
@@ -134,10 +166,6 @@ export function loadSession(): PersistedSession {
     cachedSession = { ...defaultSession };
     return cachedSession;
   }
-}
-
-export function getSession(): PersistedSession {
-  return cachedSession;
 }
 
 export function saveSession(partial: Partial<PersistedSession>): void {

@@ -7,8 +7,6 @@ import {
   type PersistedPlayback,
 } from "./session";
 
-export type { LoopMode };
-
 interface PlaybackState {
   currentTrack: Track | null;
   isPlaying: boolean;
@@ -32,41 +30,45 @@ const initialState: PlaybackState = {
   playlist: [],
   currentIndex: -1,
   isMuted: false,
-  loopMode: 'none',
+  loopMode: "none",
   shuffleMode: false,
   shuffledPlaylist: [],
 };
 
 function smartShuffle(tracks: Track[], currentTrack: Track | null): Track[] {
-  const arr = [...tracks]
+  const arr = [...tracks];
   // Fisher-Yates
   for (let i = arr.length - 1; i > 0; i--) {
     const j = Math.floor(Math.random() * (i + 1));
-    [arr[i], arr[j]] = [arr[j], arr[i]]
+    [arr[i], arr[j]] = [arr[j], arr[i]];
   }
   // Post-process: spread same-artist tracks so they're not consecutive
   for (let i = 0; i < arr.length - 1; i++) {
-    const a = arr[i], b = arr[i + 1]
+    const a = arr[i],
+      b = arr[i + 1];
     if (a.artist_raw && b.artist_raw && a.artist_raw === b.artist_raw) {
       for (let j = i + 2; j < arr.length; j++) {
         if (!arr[j].artist_raw || arr[j].artist_raw !== a.artist_raw) {
-          ;[arr[i + 1], arr[j]] = [arr[j], arr[i + 1]]
-          break
+          [arr[i + 1], arr[j]] = [arr[j], arr[i + 1]];
+          break;
         }
       }
     }
   }
   // Put current track first so it continues playing
   if (currentTrack) {
-    const idx = arr.findIndex(t => t.path === currentTrack.path)
-    if (idx > 0) [arr[0], arr[idx]] = [arr[idx], arr[0]]
+    const idx = arr.findIndex((t) => t.path === currentTrack.path);
+    if (idx > 0) [arr[0], arr[idx]] = [arr[idx], arr[0]];
   }
-  return arr
+  return arr;
 }
 
 function createPlaybackStore() {
-  const { subscribe, set: origSet, update: origUpdate } =
-    writable<PlaybackState>({ ...initialState });
+  const {
+    subscribe,
+    set: origSet,
+    update: origUpdate,
+  } = writable<PlaybackState>({ ...initialState });
 
   let currentState: PlaybackState = { ...initialState };
 
@@ -176,14 +178,14 @@ function createPlaybackStore() {
   // Internal helper: start playing a track at a specific index without resetting playlist.
   // Used by next() / previous() so shuffledPlaylist and playlist are preserved.
   function playTrackAt(index: number, activePlaylist: Track[]) {
-    const track = activePlaylist[index]
-    if (!track) return
-    update(s => ({ ...s, currentTrack: track, currentIndex: index }))
-    const audio = initAudio()
-    const streamUrl = `/stream?path=${encodeURIComponent(track.path)}`
-    audio.src = streamUrl
-    audio.load()
-    audio.play().catch((e) => console.error("Failed to play audio:", e))
+    const track = activePlaylist[index];
+    if (!track) return;
+    update((s) => ({ ...s, currentTrack: track, currentIndex: index }));
+    const audio = initAudio();
+    const streamUrl = `/stream?path=${encodeURIComponent(track.path)}`;
+    audio.src = streamUrl;
+    audio.load();
+    audio.play().catch((e) => console.error("Failed to play audio:", e));
   }
 
   function restore(
@@ -236,13 +238,13 @@ function createPlaybackStore() {
 
     if (playlist && playlist.length > 0) {
       const index = playlist.findIndex((t) => t.path === track.path);
-      const state = getState()
-      let shuffledPlaylist = state.shuffledPlaylist
-      let activeIndex = index >= 0 ? index : 0
+      const state = getState();
+      let shuffledPlaylist = state.shuffledPlaylist;
+      let activeIndex = index >= 0 ? index : 0;
       // Rebuild shuffle with new playlist if shuffle is already on
       if (state.shuffleMode) {
-        shuffledPlaylist = smartShuffle(playlist, track)
-        activeIndex = 0
+        shuffledPlaylist = smartShuffle(playlist, track);
+        activeIndex = 0;
       }
       update((s) => ({
         ...s,
@@ -331,16 +333,25 @@ function createPlaybackStore() {
 
   function next() {
     const state = getState();
-    const activePlaylist = state.shuffleMode && state.shuffledPlaylist.length > 0
-      ? state.shuffledPlaylist : state.playlist
+    const activePlaylist =
+      state.shuffleMode && state.shuffledPlaylist.length > 0
+        ? state.shuffledPlaylist
+        : state.playlist;
     if (activePlaylist.length === 0 || state.currentIndex < 0) return;
 
-    if (state.loopMode === 'one') { seek(0); resume(); return }
+    if (state.loopMode === "one") {
+      seek(0);
+      resume();
+      return;
+    }
 
-    const atEnd = state.currentIndex === activePlaylist.length - 1
-    if (atEnd && state.loopMode === 'none') { stop(); return }
+    const atEnd = state.currentIndex === activePlaylist.length - 1;
+    if (atEnd && state.loopMode === "none") {
+      stop();
+      return;
+    }
 
-    playTrackAt(atEnd ? 0 : state.currentIndex + 1, activePlaylist)
+    playTrackAt(atEnd ? 0 : state.currentIndex + 1, activePlaylist);
   }
 
   function previous() {
@@ -350,14 +361,17 @@ function createPlaybackStore() {
       return;
     }
 
-    const activePlaylist = state.shuffleMode && state.shuffledPlaylist.length > 0
-      ? state.shuffledPlaylist : state.playlist
+    const activePlaylist =
+      state.shuffleMode && state.shuffledPlaylist.length > 0
+        ? state.shuffledPlaylist
+        : state.playlist;
     if (activePlaylist.length === 0 || state.currentIndex < 0) return;
 
-    const prevIndex = state.currentIndex === 0
-      ? activePlaylist.length - 1
-      : state.currentIndex - 1
-    playTrackAt(prevIndex, activePlaylist)
+    const prevIndex =
+      state.currentIndex === 0
+        ? activePlaylist.length - 1
+        : state.currentIndex - 1;
+    playTrackAt(prevIndex, activePlaylist);
   }
 
   function stop() {
@@ -373,21 +387,34 @@ function createPlaybackStore() {
   }
 
   function cycleLoop() {
-    update(s => {
-      const next: LoopMode = s.loopMode === 'none' ? 'all' : s.loopMode === 'all' ? 'one' : 'none'
-      return { ...s, loopMode: next }
-    })
+    update((s) => {
+      const next: LoopMode =
+        s.loopMode === "none" ? "all" : s.loopMode === "all" ? "one" : "none";
+      return { ...s, loopMode: next };
+    });
     persistPlaybackNow();
   }
 
   function toggleShuffle() {
-    const state = getState()
+    const state = getState();
     if (state.shuffleMode) {
-      const idx = state.playlist.findIndex(t => t.path === state.currentTrack?.path)
-      update(s => ({ ...s, shuffleMode: false, shuffledPlaylist: [], currentIndex: idx >= 0 ? idx : 0 }))
+      const idx = state.playlist.findIndex(
+        (t) => t.path === state.currentTrack?.path,
+      );
+      update((s) => ({
+        ...s,
+        shuffleMode: false,
+        shuffledPlaylist: [],
+        currentIndex: idx >= 0 ? idx : 0,
+      }));
     } else {
-      const shuffled = smartShuffle(state.playlist, state.currentTrack)
-      update(s => ({ ...s, shuffleMode: true, shuffledPlaylist: shuffled, currentIndex: 0 }))
+      const shuffled = smartShuffle(state.playlist, state.currentTrack);
+      update((s) => ({
+        ...s,
+        shuffleMode: true,
+        shuffledPlaylist: shuffled,
+        currentIndex: 0,
+      }));
     }
     persistPlaybackNow();
   }

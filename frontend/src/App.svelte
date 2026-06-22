@@ -7,7 +7,9 @@
   import TopBar from "./lib/components/layout/TopBar.svelte";
   import EmptyState from "./lib/components/layout/EmptyState.svelte";
   import LibraryContent from "./lib/components/layout/LibraryContent.svelte";
-  import FilterPanel, { type FilterState } from "./lib/components/layout/FilterPanel.svelte";
+  import FilterPanel, {
+    type FilterState,
+  } from "./lib/components/layout/FilterPanel.svelte";
   import AlgoConfigPanel from "./lib/components/layout/AlgoConfigPanel.svelte";
   import FloatingPlayer from "./lib/components/layout/FloatingPlayer.svelte";
   import Toast from "./lib/components/ui/Toast.svelte";
@@ -47,7 +49,7 @@
   import { devMode } from "./lib/stores/devMode";
   import { appConfig } from "./lib/stores/settings";
   // Extract derived store so $orgSelectedSuggestion works (organizer is a plain object, not a store)
-  const orgSelectedSuggestion = organizer.selectedSuggestion
+  const orgSelectedSuggestion = organizer.selectedSuggestion;
   import OrganizerView from "./lib/components/analysis/OrganizerView.svelte";
   import OrganizerDetailPanel from "./lib/components/organizer/OrganizerDetailPanel.svelte";
   import CleanerView from "./lib/components/analysis/CleanerView.svelte";
@@ -89,7 +91,11 @@
       return s?.track.filename ?? s?.track.path.split(/[/\\]/).pop() ?? null;
     }
     if (activeTab === "library" && selectedTrack) {
-      return selectedTrack.filename ?? selectedTrack.path.split(/[/\\]/).pop() ?? null;
+      return (
+        selectedTrack.filename ??
+        selectedTrack.path.split(/[/\\]/).pop() ??
+        null
+      );
     }
     return null;
   });
@@ -136,7 +142,10 @@
       await ScanLibrary(saved.libraryPath);
       await loadInitialTracks();
 
-      while (currentOffset < saved.listOffset && tracks.length < totalTrackCount) {
+      while (
+        currentOffset < saved.listOffset &&
+        tracks.length < totalTrackCount
+      ) {
         await loadMoreTracks();
       }
 
@@ -211,7 +220,7 @@
 
   async function runStartupUpdateCheck() {
     await updateStore.init();
-    await updateStore.check(true);
+    await updateStore.check({ silent: true, force: true });
     if (updateStore.isDismissed()) return;
     const u = get(updateStore);
     if (u.updateAvailable && u.latestVersion) {
@@ -275,33 +284,44 @@
    * Loads the first page of tracks.
    * Resets pagination state.
    */
+  function getSizeFilterBytes() {
+    return {
+      sizeMinBytes: filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0,
+      sizeMaxBytes: filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0,
+    };
+  }
+
+  function mapTrackFromApi(track: any): Track {
+    return {
+      ...track,
+      artist: track.artist_raw || "",
+      album: track.album_raw || "",
+    };
+  }
+
+  async function fetchTracksPage(offset: number) {
+    const { sizeMinBytes, sizeMaxBytes } = getSizeFilterBytes();
+    return ListTracks(
+      currentLibraryPath,
+      searchQuery,
+      filters.yearMin,
+      filters.yearMax,
+      sizeMinBytes,
+      sizeMaxBytes,
+      PAGE_SIZE,
+      offset,
+    );
+  }
+
   async function loadInitialTracks() {
     if (!currentLibraryPath) {
       return;
     }
 
     try {
-      // Convert MB to bytes for size filters
-      const sizeMinBytes = filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0;
-      const sizeMaxBytes = filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0;
+      const result = await fetchTracksPage(0);
 
-      const result = await ListTracks(
-        currentLibraryPath,
-        searchQuery,
-        filters.yearMin,
-        filters.yearMax,
-        sizeMinBytes,
-        sizeMaxBytes,
-        PAGE_SIZE,
-        0
-      );
-
-      tracks =
-        result?.Tracks?.map((t: any) => ({
-          ...t,
-          artist: t.artist_raw || "",
-          album: t.album_raw || "",
-        })) ?? [];
+      tracks = result?.Tracks?.map(mapTrackFromApi) ?? [];
 
       totalTrackCount = result?.Total ?? 0;
       currentOffset = tracks.length;
@@ -326,27 +346,9 @@
     isLoadingMore = true;
 
     try {
-      // Convert MB to bytes for size filters
-      const sizeMinBytes = filters.sizeMin > 0 ? filters.sizeMin * 1024 * 1024 : 0;
-      const sizeMaxBytes = filters.sizeMax > 0 ? filters.sizeMax * 1024 * 1024 : 0;
+      const result = await fetchTracksPage(currentOffset);
 
-      const result = await ListTracks(
-        currentLibraryPath,
-        searchQuery,
-        filters.yearMin,
-        filters.yearMax,
-        sizeMinBytes,
-        sizeMaxBytes,
-        PAGE_SIZE,
-        currentOffset
-      );
-
-      const newTracks =
-        result?.Tracks?.map((t: any) => ({
-          ...t,
-          artist: t.artist_raw || "",
-          album: t.album_raw || "",
-        })) ?? [];
+      const newTracks = result?.Tracks?.map(mapTrackFromApi) ?? [];
 
       tracks = [...tracks, ...newTracks];
       currentOffset += newTracks.length;
@@ -402,9 +404,9 @@
   // Count active filters
   const activeFilterCount = $derived(
     (filters.yearMin > 0 ? 1 : 0) +
-    (filters.yearMax > 0 ? 1 : 0) +
-    (filters.sizeMin > 0 ? 1 : 0) +
-    (filters.sizeMax > 0 ? 1 : 0)
+      (filters.yearMax > 0 ? 1 : 0) +
+      (filters.sizeMin > 0 ? 1 : 0) +
+      (filters.sizeMax > 0 ? 1 : 0),
   );
 
   const hasMoreTracks = $derived(tracks.length < totalTrackCount);
@@ -412,24 +414,36 @@
   const analysisLoadingStore = analysis.loading;
 
   function handleTrackSaved(updated: Track) {
-    selectedTrack = updated
-    tracks = tracks.map(t => t.id === updated.id ? updated : t)
+    selectedTrack = updated;
+    tracks = tracks.map((t) => (t.id === updated.id ? updated : t));
   }
 
-  async function handleOrganizerApply(trackID: number, fields: Record<string, string>) {
+  async function handleOrganizerApply(
+    trackID: number,
+    fields: Record<string, string>,
+  ) {
     try {
-      const template = get(organizer.filenameTemplate)
-      const artist   = fields['artist']    ?? ''
-      const title    = fields['title']     ?? ''
-      const album    = fields['album']     ?? ''
-      const year     = fields['year']      ? parseInt(fields['year'])      : 0
-      const trackNum = fields['track_num'] ? parseInt(fields['track_num']) : 0
-      await ApplyOrganizerSuggestion(trackID, artist, title, album, year, trackNum, template, currentLibraryPath)
-      organizer.updateTrackSuggestion(trackID, fields)
-      toast.success(get(t)('saved'))
+      const template = get(organizer.filenameTemplate);
+      const artist = fields["artist"] ?? "";
+      const title = fields["title"] ?? "";
+      const album = fields["album"] ?? "";
+      const year = fields["year"] ? parseInt(fields["year"]) : 0;
+      const trackNum = fields["track_num"] ? parseInt(fields["track_num"]) : 0;
+      await ApplyOrganizerSuggestion(
+        trackID,
+        artist,
+        title,
+        album,
+        year,
+        trackNum,
+        template,
+        currentLibraryPath,
+      );
+      organizer.updateTrackSuggestion(trackID, fields);
+      toast.success(get(t)("saved"));
     } catch (e) {
-      toast.error(`${get(t)('saveError')}: ${e}`)
-      throw e
+      toast.error(`${get(t)("saveError")}: ${e}`);
+      throw e;
     }
   }
 
@@ -454,26 +468,26 @@
   // Sync selectedTrack with playback when prev/next is used while on the library tab.
   // The VirtualList scroll-to-selected effect in LibraryContent fires automatically.
   $effect(() => {
-    const unsub = playbackStore.subscribe(state => {
-      if (activeTab !== 'library' || !state.currentTrack) return
+    const unsub = playbackStore.subscribe((state) => {
+      if (activeTab !== "library" || !state.currentTrack) return;
       if (state.currentTrack.path !== selectedTrack?.path) {
-        const match = tracks.find(t => t.path === state.currentTrack!.path)
-        if (match) selectedTrack = match
+        const match = tracks.find((t) => t.path === state.currentTrack!.path);
+        if (match) selectedTrack = match;
       }
-    })
-    return () => unsub()
-  })
+    });
+    return () => unsub();
+  });
 
   // Ctrl+Shift+D toggles dev mode (shows suggestion trace in OrganizerDetailPanel).
   $effect(() => {
     function onKeydown(e: KeyboardEvent) {
-      if (e.ctrlKey && e.shiftKey && e.key === 'D') {
-        devMode.update(v => !v)
+      if (e.ctrlKey && e.shiftKey && e.key === "D") {
+        devMode.update((v) => !v);
       }
     }
-    window.addEventListener('keydown', onKeydown)
-    return () => window.removeEventListener('keydown', onKeydown)
-  })
+    window.addEventListener("keydown", onKeydown);
+    return () => window.removeEventListener("keydown", onKeydown);
+  });
 
   async function handleDeleteTrack(id: number) {
     await DeleteTrack(id);
@@ -489,7 +503,9 @@
         AnalyzeArtists(currentLibraryPath),
         DetectDuplicates(currentLibraryPath),
       ]);
-      analysis.setArtistSuggestions((suggestions ?? []) as import("./lib/types").ArtistSuggestion[]);
+      analysis.setArtistSuggestions(
+        (suggestions ?? []) as import("./lib/types").ArtistSuggestion[],
+      );
       analysis.setDuplicates((duplicates ?? []) as DuplicateGroup[]);
       analysis.setHasRunOnce(true);
     } catch (e) {
@@ -515,9 +531,9 @@
         {activeTab}
         onBrowse={handleBrowse}
         {searchQuery}
-        onSearchChange={(query) => searchQuery = query}
-        onFilterToggle={() => isFilterPanelOpen = !isFilterPanelOpen}
-        onConfigToggle={() => isConfigPanelOpen = !isConfigPanelOpen}
+        onSearchChange={(query) => (searchQuery = query)}
+        onFilterToggle={() => (isFilterPanelOpen = !isFilterPanelOpen)}
+        onConfigToggle={() => (isConfigPanelOpen = !isConfigPanelOpen)}
         {activeFilterCount}
         onRunAnalysis={handleRunAnalysis}
         analysisLoading={$analysisLoadingStore}
@@ -532,7 +548,10 @@
         {#if activeTab === "settings"}
           <Settings />
         {:else if activeTab === "organizer"}
-          <OrganizerView libraryPath={currentLibraryPath} onBrowse={handleBrowse} />
+          <OrganizerView
+            libraryPath={currentLibraryPath}
+            onBrowse={handleBrowse}
+          />
         {:else if activeTab === "cleaner"}
           <CleanerView
             onBrowse={handleBrowse}
@@ -571,7 +590,7 @@
   </div>
 
   <aside class="w-80 shrink-0 h-full overflow-hidden flex flex-col">
-    {#if activeTab === 'organizer'}
+    {#if activeTab === "organizer"}
       <OrganizerDetailPanel
         suggestion={$orgSelectedSuggestion}
         onApply={handleOrganizerApply}
@@ -585,7 +604,7 @@
   <!-- Filter Panel -->
   <FilterPanel
     isOpen={isFilterPanelOpen}
-    onClose={() => isFilterPanelOpen = false}
+    onClose={() => (isFilterPanelOpen = false)}
     onApply={handleApplyFilters}
     initialFilters={filters}
   />
@@ -593,7 +612,7 @@
   <!-- Algorithm Config Panel -->
   <AlgoConfigPanel
     isOpen={isConfigPanelOpen}
-    onClose={() => isConfigPanelOpen = false}
+    onClose={() => (isConfigPanelOpen = false)}
   />
 </div>
 

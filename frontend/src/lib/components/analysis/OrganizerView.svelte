@@ -22,6 +22,7 @@
   import { toast } from "../../stores/toast";
   import { t } from "../../stores/i18n";
   import type { FilenamePreview } from "../../types";
+  import OrganizerSuggestionList from "./OrganizerSuggestionList.svelte";
 
   // Svelte 4 legacy mode — no runes
   export let libraryPath = "";
@@ -198,11 +199,10 @@
     }
   }
 
-  function scoreColor(score: number): string {
-    if (score >= 75) return "bg-green-500";
-    if (score >= 50) return "bg-yellow-500";
-    if (score > 0) return "bg-yellow-500/50";
-    return "bg-white/10";
+  function handleSuggestionSelect(trackId: number) {
+    organizer.setSelectedTrack(
+      get(selectedTrackId) === trackId ? null : trackId,
+    );
   }
 </script>
 
@@ -494,167 +494,20 @@
                 >
               </button>
               {#if expandedArtists.has(group.artist)}
-                {#each group.items as sugg (sugg.track_id)}
-                  {@const hasFields = Object.keys(sugg.fields).length > 0}
-                  {@const isSelected = $selectedTrackId === sugg.track_id}
-                  <button
-                    type="button"
-                    on:click={() =>
-                      organizer.setSelectedTrack(
-                        isSelected ? null : sugg.track_id,
-                      )}
-                    class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all
-                           hover:bg-surface/50
-                           {isSelected
-                      ? 'bg-surface border-l-2 border-l-accent'
-                      : 'border-l-2 border-l-transparent'}"
-                  >
-                    <div
-                      class="w-2 h-2 rounded-full shrink-0 {scoreColor(
-                        sugg.score,
-                      )}"
-                    ></div>
-                    <div class="flex-1 min-w-0">
-                      {#if sugg.fields["title"]}
-                        <div
-                          class="text-xs font-semibold text-accent truncate leading-tight"
-                        >
-                          {sugg.fields["title"].value}
-                        </div>
-                        <div
-                          class="text-[9px] text-text-muted/40 line-through truncate leading-tight"
-                        >
-                          {sugg.track.title || sugg.track.filename}
-                        </div>
-                      {:else}
-                        <div
-                          class="text-xs font-semibold text-text-primary truncate leading-tight"
-                        >
-                          {sugg.track.title || sugg.track.filename}
-                        </div>
-                      {/if}
-                      {#if sugg.fields["artist"]}
-                        <div class="flex items-center gap-1 mt-0.5 min-w-0">
-                          <span
-                            class="text-[9px] text-text-muted/40 line-through truncate shrink min-w-0 max-w-[40%]"
-                            >{sugg.track.artist_raw || "—"}</span
-                          >
-                          <span class="text-[9px] text-text-muted/30 shrink-0"
-                            >→</span
-                          >
-                          <span
-                            class="text-[9px] text-accent font-medium truncate shrink min-w-0"
-                            >{sugg.fields["artist"].value}</span
-                          >
-                        </div>
-                      {:else}
-                        <div
-                          class="text-[10px] text-text-muted truncate mt-0.5"
-                        >
-                          {sugg.track.artist_raw || "—"}
-                        </div>
-                      {/if}
-                    </div>
-                    {#if hasFields}
-                      <span
-                        class="shrink-0 text-[9px] font-bold tabular-nums {sugg.score >=
-                        75
-                          ? 'text-green-400'
-                          : 'text-yellow-400'}">{Math.round(sugg.score)}%</span
-                      >
-                    {:else}
-                      <CheckCircleIcon
-                        size={12}
-                        class="text-green-400/60 shrink-0"
-                      />
-                    {/if}
-                  </button>
-                {/each}
+                <OrganizerSuggestionList
+                  items={group.items}
+                  selectedTrackId={$selectedTrackId}
+                  onToggleSelect={handleSuggestionSelect}
+                />
               {/if}
             {/each}
           {:else}
             <!-- Flat list (default) -->
-            {#each displayList as sugg (sugg.track_id)}
-              {@const hasFields = Object.keys(sugg.fields).length > 0}
-              {@const isSelected = $selectedTrackId === sugg.track_id}
-
-              <button
-                type="button"
-                on:click={() =>
-                  organizer.setSelectedTrack(isSelected ? null : sugg.track_id)}
-                class="w-full flex items-center gap-3 px-4 py-2.5 text-left transition-all
-                       hover:bg-surface/50
-                       {isSelected
-                  ? 'bg-surface border-l-2 border-l-accent'
-                  : 'border-l-2 border-l-transparent'}"
-              >
-                <!-- Score dot -->
-                <div
-                  class="w-2 h-2 rounded-full shrink-0 {scoreColor(sugg.score)}"
-                ></div>
-
-                <!-- Track info: current → suggestion -->
-                <div class="flex-1 min-w-0">
-                  {#if sugg.fields["title"]}
-                    <div
-                      class="text-xs font-semibold text-accent truncate leading-tight"
-                    >
-                      {sugg.fields["title"].value}
-                    </div>
-                    <div
-                      class="text-[9px] text-text-muted/40 line-through truncate leading-tight"
-                    >
-                      {sugg.track.title || sugg.track.filename}
-                    </div>
-                  {:else}
-                    <div
-                      class="text-xs font-semibold text-text-primary truncate leading-tight"
-                    >
-                      {sugg.track.title || sugg.track.filename}
-                    </div>
-                  {/if}
-
-                  {#if sugg.fields["artist"]}
-                    <div class="flex items-center gap-1 mt-0.5 min-w-0">
-                      <span
-                        class="text-[9px] text-text-muted/40 line-through truncate shrink min-w-0 max-w-[40%]"
-                      >
-                        {sugg.track.artist_raw || "—"}
-                      </span>
-                      <span class="text-[9px] text-text-muted/30 shrink-0"
-                        >→</span
-                      >
-                      <span
-                        class="text-[9px] text-accent font-medium truncate shrink min-w-0"
-                      >
-                        {sugg.fields["artist"].value}
-                      </span>
-                    </div>
-                  {:else}
-                    <div class="text-[10px] text-text-muted truncate mt-0.5">
-                      {sugg.track.artist_raw || "—"}
-                    </div>
-                  {/if}
-                </div>
-
-                <!-- Score / complete -->
-                {#if hasFields}
-                  <span
-                    class="shrink-0 text-[9px] font-bold tabular-nums
-                               {sugg.score >= 75
-                      ? 'text-green-400'
-                      : 'text-yellow-400'}"
-                  >
-                    {Math.round(sugg.score)}%
-                  </span>
-                {:else}
-                  <CheckCircleIcon
-                    size={12}
-                    class="text-green-400/60 shrink-0"
-                  />
-                {/if}
-              </button>
-            {/each}
+            <OrganizerSuggestionList
+              items={displayList}
+              selectedTrackId={$selectedTrackId}
+              onToggleSelect={handleSuggestionSelect}
+            />
           {/if}
         </div>
       {/if}

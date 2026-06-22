@@ -72,6 +72,7 @@ const translations = {
     downloadUpdate: "Download update",
     dismissUpdate: "Dismiss",
     updateCheckFailed: "Could not check for updates",
+    updateCheckCached: "Already checked within the last hour",
     lastChecked: "Last checked",
     checking: "Checking...",
     aboutDescription: "A premium tool for music library organization.",
@@ -229,6 +230,7 @@ const translations = {
     downloadUpdate: "Télécharger la mise à jour",
     dismissUpdate: "Ignorer",
     updateCheckFailed: "Impossible de vérifier les mises à jour",
+    updateCheckCached: "Vérifié il y a moins d'une heure",
     lastChecked: "Dernière vérification",
     checking: "Vérification...",
     aboutDescription:

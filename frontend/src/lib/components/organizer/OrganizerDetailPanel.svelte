@@ -667,36 +667,3 @@
     </div>
   </div>
 {/if}
-
-<style>
-  .field-label {
-    display: block;
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.1em;
-    color: var(--color-text-secondary);
-    opacity: 0.7;
-    margin-bottom: 0;
-  }
-
-  .field-input {
-    width: 100%;
-    background: var(--color-background);
-    border: 1px solid var(--color-border);
-    border-radius: 6px;
-    padding: 6px 10px;
-    font-size: 13px;
-    outline: none;
-    transition:
-      border-color 0.15s,
-      box-shadow 0.15s;
-    color: var(--color-text-primary);
-  }
-
-  .field-input:focus {
-    border-color: var(--color-accent);
-    box-shadow: 0 0 0 2px
-      color-mix(in srgb, var(--color-accent) 15%, transparent);
-  }
-</style>

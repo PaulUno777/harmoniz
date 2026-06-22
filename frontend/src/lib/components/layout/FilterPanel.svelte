@@ -15,7 +15,18 @@
 
   let { isOpen, onClose, onApply, initialFilters }: Props = $props();
 
-  let filters = $state<FilterState>({ ...initialFilters });
+  let filters = $state<FilterState>({
+    yearMin: 0,
+    yearMax: 0,
+    sizeMin: 0,
+    sizeMax: 0,
+  });
+
+  $effect(() => {
+    if (isOpen) {
+      filters = { ...initialFilters };
+    }
+  });
 
   function handleApply() {
     onApply(filters);
@@ -70,10 +81,14 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-medium text-text-secondary mb-2">
+            <label
+              for="filter-year-min"
+              class="block text-xs font-medium text-text-secondary mb-2"
+            >
               From
             </label>
             <input
+              id="filter-year-min"
               type="number"
               bind:value={filters.yearMin}
               placeholder="1900"
@@ -82,10 +97,14 @@
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-text-secondary mb-2">
+            <label
+              for="filter-year-max"
+              class="block text-xs font-medium text-text-secondary mb-2"
+            >
               To
             </label>
             <input
+              id="filter-year-max"
               type="number"
               bind:value={filters.yearMax}
               placeholder="2024"
@@ -104,10 +123,14 @@
 
         <div class="grid grid-cols-2 gap-3">
           <div>
-            <label class="block text-xs font-medium text-text-secondary mb-2">
+            <label
+              for="filter-size-min"
+              class="block text-xs font-medium text-text-secondary mb-2"
+            >
               Min (MB)
             </label>
             <input
+              id="filter-size-min"
               type="number"
               bind:value={filters.sizeMin}
               placeholder="0"
@@ -117,10 +140,14 @@
             />
           </div>
           <div>
-            <label class="block text-xs font-medium text-text-secondary mb-2">
+            <label
+              for="filter-size-max"
+              class="block text-xs font-medium text-text-secondary mb-2"
+            >
               Max (MB)
             </label>
             <input
+              id="filter-size-max"
               type="number"
               bind:value={filters.sizeMax}
               placeholder="100"
