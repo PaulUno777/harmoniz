@@ -1,11 +1,11 @@
 import { writable } from "svelte/store";
 
-export type Theme = "dark" | "light" | "system";
+type Theme = "dark" | "light" | "system";
 
 // Helper function to call Wails window theme functions safely
 function setWindowTheme(theme: "dark" | "light" | "system") {
   if (typeof window === "undefined") return;
-  
+
   try {
     // Try to use Wails runtime functions
     // @ts-ignore - Wails runtime may not be available in dev mode
@@ -23,7 +23,9 @@ function setWindowTheme(theme: "dark" | "light" | "system") {
         console.log(`[Theme] Called WindowSetLightTheme()`);
       }
     } else {
-      console.warn(`[Theme] Wails runtime not available - window title bar theme won't change`);
+      console.warn(
+        `[Theme] Wails runtime not available - window title bar theme won't change`,
+      );
     }
   } catch (e) {
     // Wails runtime not available (e.g., in dev mode or browser)

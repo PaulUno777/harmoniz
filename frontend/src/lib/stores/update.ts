@@ -4,11 +4,7 @@ import {
   CheckForUpdates,
   GetAppVersion,
 } from "../../../wailsjs/go/main/App.js";
-import {
-  loadSession,
-  saveSession,
-  type PersistedUpdateCheck,
-} from "./session";
+import { loadSession, saveSession, type PersistedUpdateCheck } from "./session";
 
 type UpdateStatus = "idle" | "checking" | "ready" | "error";
 
@@ -24,9 +20,9 @@ interface UpdateState {
 }
 
 /** Minimum interval between successful GitHub release checks. */
-export const CHECK_TTL_MS = 60 * 60 * 1000;
+const CHECK_TTL_MS = 60 * 60 * 1000;
 /** Shorter retry window after a failed check (network/GitHub errors). */
-export const CHECK_ERROR_TTL_MS = 15 * 60 * 1000;
+const CHECK_ERROR_TTL_MS = 15 * 60 * 1000;
 
 const initialState: UpdateState = {
   currentVersion: "",
@@ -68,7 +64,10 @@ function formatError(e: unknown): string {
   }
 }
 
-export function isCheckCacheFresh(lastCheckedAt: string | null, status?: UpdateStatus): boolean {
+export function isCheckCacheFresh(
+  lastCheckedAt: string | null,
+  status?: UpdateStatus,
+): boolean {
   if (!lastCheckedAt) return false;
   const age = Date.now() - new Date(lastCheckedAt).getTime();
   if (age < 0) return false;
@@ -123,7 +122,9 @@ async function check(options: { silent?: boolean; force?: boolean } = {}) {
   const cached = loadCachedCheck();
   if (!force && cached && isCheckCacheFresh(cached.checkedAt, cached.status)) {
     if (!silent) {
-      console.info("[update] using cached check", { checkedAt: cached.checkedAt });
+      console.info("[update] using cached check", {
+        checkedAt: cached.checkedAt,
+      });
     }
     applyCachedCheck(cached);
     return;

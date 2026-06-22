@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { t } from "../../stores/i18n";
+  import { subscribeI18n, type TranslateFn } from "../../utils/i18nSubscribe";
   import type { Track } from "../../types";
   import VirtualList from "@humanspeak/svelte-virtual-list";
   import TrackItem from "./TrackItem.svelte";
@@ -32,16 +32,12 @@
     onLoadMore,
   }: Props = $props();
 
-  // Avoid `$t(...)` auto-subscription edge cases with runes + tooling:
-  // keep a reactive translation function via explicit subscription.
-  let tr = $state<(key: any) => string>((key) => String(key));
-  onMount(() => {
-    const unsub = t.subscribe((fn) => {
-      tr = fn as any;
-    });
-    onDestroy(unsub);
+  let tr = $state<TranslateFn>((key) => String(key));
+  subscribeI18n((fn) => {
+    tr = fn;
+  });
 
-    // Enable debug mode with Ctrl+Shift+D (or Cmd+Shift+D on Mac)
+  onMount(() => {
     const handleKeyPress = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "D") {
         e.preventDefault();

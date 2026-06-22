@@ -147,7 +147,7 @@
           <!-- Track Info (Left) – keyed so it updates when track changes -->
           {#key playbackState.currentTrack?.path}
             <div
-              class="flex items-center gap-3 min-w-0 max-w-[300px] overflow-hidden justify-self-start"
+              class="flex items-center gap-3 min-w-0 max-w-[260px] overflow-hidden justify-self-start"
             >
               <div
                 class="w-12 h-12 bg-background rounded-lg flex items-center justify-center border border-border shrink-0
@@ -359,42 +359,5 @@
     to {
       transform: translateX(-50%);
     }
-  }
-
-  input[type="range"] {
-    -webkit-appearance: none;
-    appearance: none;
-  }
-
-  input[type="range"]::-webkit-slider-thumb {
-    -webkit-appearance: none;
-    appearance: none;
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--color-accent);
-    cursor: pointer;
-    border: 2px solid var(--color-background);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-
-  input[type="range"]::-webkit-slider-thumb:hover {
-    background: var(--color-accent-hover);
-    transform: scale(1.1);
-  }
-
-  input[type="range"]::-moz-range-thumb {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    background: var(--color-accent);
-    cursor: pointer;
-    border: 2px solid var(--color-background);
-    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  }
-
-  input[type="range"]::-moz-range-thumb:hover {
-    background: var(--color-accent-hover);
-    transform: scale(1.1);
   }
 </style>
